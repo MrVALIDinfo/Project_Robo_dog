@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SpotMicro 3D</title>
+<style>
+:root{--bg:#14161a;--panel:#1d2026;--ink:#e8eaee;--mut:#8a909c;--acc:#f2c200}
+*{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:14px system-ui,sans-serif}
+#app{display:grid;grid-template-columns:1fr 320px;height:100%}
+#view{position:relative;min-width:0}canvas{display:block;width:100%;height:100%}
+#side{background:var(--panel);padding:14px;overflow:auto;border-left:1px solid #2a2e36}
+h1{font-size:17px;margin:0 0 4px}h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin:16px 0 6px}
+button{background:#2a2e36;color:var(--ink);border:1px solid #3a3f4a;border-radius:6px;padding:7px 10px;margin:0 4px 4px 0;cursor:pointer;font:inherit}
+button:hover{border-color:var(--acc)}button.on{background:var(--acc);color:#111;border-color:var(--acc)}
+label.row{display:flex;align-items:center;gap:8px;margin:3px 0}
+.sl{display:grid;grid-template-columns:118px 1fr 36px;gap:6px;align-items:center;font-size:12px;margin:2px 0}
+.sl input{width:100%}.sl span:last-child{color:var(--mut);text-align:right}
+.sw{width:11px;height:11px;border-radius:3px;display:inline-block;border:1px solid #666}
+details{margin:12px 0 4px}summary{cursor:pointer;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin-bottom:6px}#wiring{font-size:12px;line-height:1.55;color:#c9ced8}
+#tip{position:absolute;left:12px;bottom:10px;color:var(--mut);font-size:12px;pointer-events:none}
+#lbl{position:absolute;pointer-events:none;background:#000c;color:#fff;padding:3px 7px;border-radius:5px;font-size:12px;display:none;white-space:nowrap}
+#load{position:absolute;inset:0;display:grid;place-items:center;color:var(--mut)}
+@media(max-width:800px){#app{grid-template-columns:1fr;grid-template-rows:55% 45%}}
+</style></head><body>
+<div id="app">
+ <div id="view"><div id="load">Загрузка модели…</div><div id="tip">ЛКМ — вращать · ПКМ — двигать · колесо — масштаб · наведи на деталь — название</div><div id="lbl"></div></div>
+ <aside id="side">
+  <h1>SpotMicro — 3D модель</h1>
+  <div style="color:var(--mut);font-size:12px">Реальные STL корпуса и CAD Pi/PCA9685; остальное габаритные модели. Состав и подключение — по README.</div>
+  <h2>Позы</h2>
+  <div><button id="bStand" class="on">Стойка</button><button id="bSit">Сесть</button><button id="bWalk">Управление</button><button id="bSpin">Вращение</button></div>
+  <h2>Слои</h2>
+  <label class="row"><input type="checkbox" id="cShell" checked> Корпус и ноги</label>
+  <label class="row" style="display:grid;grid-template-columns:auto minmax(0,1fr) 36px;gap:8px">Прозрачность <input type="range" id="sGhost" min="0" max="100" value="0" style="min-width:0;width:100%"><span id="vGhost" style="color:var(--mut);text-align:right">0%</span></label>
+  <label class="row"><input type="checkbox" id="cElec" checked> Электроника, серво, провода</label>
+  <label class="row"><input type="checkbox" id="cLogo" checked> Логотип</label>
+  <label class="row"><input type="checkbox" id="cLidar"> Лидар (опция)</label>
+  <label class="row"><input type="checkbox" id="cGrid" checked> Сетка</label>
+  <details open><summary>Схема подключения</summary>
+  <div id="wiring">
+   <b>Серво:</b> LiPo 2S 7.4 В → V+/GND платы PCA9685.<br>
+   <b>Логика:</b> LiPo → UBEC 5 В → Pi (pin 2, 6), PCA9685, LCD.<br>
+   <b>I²C:</b> Pi pin 3 (SDA), pin 5 (SCL) → PCA9685 (0x40), LCD (0x27).<br>
+   <b>Каналы:</b> серво № − 1. RF 1–3, RB 4–6, LB 7–9, LF 10–12 (колено, бедро, плечо).<br>
+   Жилы: коричневая GND, красная V+, оранжевая PWM.
+  </div></details>
+  <details><summary>Компоненты</summary>
+  <div id="legend"></div></details>
+  <details><summary>Суставы (слайдеры)</summary><div id="joints"></div></details>
+ </aside>
+</div>
+<script>window.addEventListener("error",e=>{const t=document.getElementById("tip");t.style.color="#ff6b6b";t.textContent="ОШИБКА: "+e.message+" @"+(e.filename||"").split("/").pop()+":"+e.lineno});window.addEventListener("unhandledrejection",e=>{const t=document.getElementById("tip");t.style.color="#ff6b6b";t.textContent="ОШИБКА: "+(e.reason&&e.reason.message||e.reason)})</script>
+<script type="importmap">{"imports":{"three":"./lib/three.module.js","three/examples/jsm/loaders/STLLoader.js":"./lib/jsm/STLLoader.js","three/examples/jsm/loaders/SVGLoader.js":"./lib/jsm/SVGLoader.js","three/examples/jsm/loaders/FontLoader.js":"./lib/jsm/FontLoader.js","three/examples/jsm/geometries/TextGeometry.js":"./lib/jsm/TextGeometry.js","three/examples/jsm/controls/OrbitControls.js":"./lib/jsm/OrbitControls.js"}}</script>
+<script type="module" src="./app.js"></script>
+</body></html>
