@@ -63,7 +63,7 @@
   <link name="rear_link">
     <visual>
       <geometry>
-        <mesh filename="stl/backpart.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="stl/backpart_filled.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <origin rpy="0 0 3.14159" xyz="0.04 0.055 -0.010"/>
       <material name="yellow"/>

@@ -2,9 +2,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js';
-import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';
-import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
 import URDFLoader from './lib/URDFLoader.js';
+import { bodyTriangles, obbOf, obbVsBody, obbObb, segVsBody } from './check.js';
 
 const view = document.getElementById('view');
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -31,18 +30,20 @@ addEventListener('resize', resize); resize();
 const manager = new THREE.LoadingManager();
 const loader = new URDFLoader(manager);
 const rig = new THREE.Group(); scene.add(rig);
-let robot, shell = [], elec = new THREE.Group();
+let robot, shell = [], body = [], layout = null;
+const layoutReady = fetch('parts/layout.json').then(r => r.json()).then(j => layout = j);
 
-const YEL = 0xe0b400, BLK = 0x222428;
 loader.load('spot_micro.urdf', r => {
   robot = r;
   robot.rotation.x = -Math.PI / 2;           // URDF: Z вверх -> three: Y вверх
   rig.add(robot);
 });
-manager.onLoad = () => {
+manager.onLoad = async () => {
   if (!robot || shell.length) return;
-  robot.traverse(o => { if (o.isMesh) { o.material = new THREE.MeshStandardMaterial({ color: o.material?.color?.getHex?.() ?? BLK, roughness: .55, metalness: .1 }); shell.push(o); } });
+  robot.traverse(o => { if (o.isMesh) { o.material = new THREE.MeshStandardMaterial({ color: o.material?.color?.getHex?.() ?? 0x222428, roughness: .55, metalness: .1 }); shell.push(o); } });
+  body = shell.filter(o => ['base_link', 'rear_link', 'front_link'].includes(linkOf(o)));   // корпус без ног и лидара
   buildJointsUI();
+  await layoutReady;
   addElectronics();
   addLogo();
   addRearText();
@@ -51,124 +52,131 @@ manager.onLoad = () => {
   fit();
   btn('bWalk').onclick();
   applyQuery();
-  setTimeout(buildLegend, 1500);
   document.getElementById('load')?.remove();
 };
 manager.onError = u => console.error('не загрузилось', u);
+function linkOf(o) { while (o && !o.isURDFLink) o = o.parent; return o?.urdfName; }
 
-// ---- электроника: реальные CAD-модели (STL, мм) + серво по паспорту MG996R ----
+// ===== детали =====
+// Всё в системе base_link, мм: X вперёд, Y влево, Z вверх. Верх плиты электроники z = -7, плита x -47…48, y ±52.
 const stlLoader = new STLLoader();
-const pick = [];
-function tagPart(root, name) { root.traverse(o => { if (o.isMesh) { o.userData.name = name; pick.push(o); } }); }
-function loadPart(file, color, name, parent, pos, rotZ = 0, extra = {}) {
+const pick = [];              // наведение мышью
+const solids = [];            // проверка стыковки
+const MM = v => v / 1000;
+const edgeMat = new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: .35 });
+function tagPart(root, name, part, cat = part, extra = {}) {
+  root.traverse(o => { if (o.isMesh) { Object.assign(o.userData, { name, part, cat, ...extra }); pick.push(o); if (!o.userData.nocheck) solids.push(o); } });
+}
+let pending = 0;
+function loadPart(file, color, name, part, parent, pos, extra = {}, ud = {}) {
+  pending++;
   stlLoader.load('parts/' + file, g => {
     g.scale(0.001, 0.001, 0.001);
     const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color, roughness: .55, metalness: .25, ...extra }));
-    m.position.set(pos[0] / 1000, pos[1] / 1000, pos[2] / 1000); m.rotation.z = rotZ;
-    parent.add(m); tagPart(m, name);
-    pending--; if (!pending) buildLegend();
+    m.position.set(MM(pos[0]), MM(pos[1]), MM(pos[2]));
+    Object.assign(m.userData, ud); parent.add(m); tagPart(m, name, part);
+    if (!--pending) onPartsLoaded();
   });
 }
-let pending = 0;
-// MG996R: корпус 40.7 x 19.7 x 36.9, фланец 54.4 x 2.5, вал на 10 мм от торца. Начало координат — ось вала у верха корпуса, вал +Z, корпус вниз -Z, длинная сторона по X
-function makeServo(name) {
+// бокс по двум углам (мм, в координатах родителя)
+function bx(parent, name, part, lo, hi, color, o = {}) {
+  const s = [0, 1, 2].map(i => hi[i] - lo[i]);
+  const m = new THREE.Mesh(new THREE.BoxGeometry(MM(s[0]), MM(s[1]), MM(s[2])), new THREE.MeshStandardMaterial({ color, roughness: o.rough ?? .55, metalness: o.metal ?? .1 }));
+  m.position.set(MM((lo[0] + hi[0]) / 2), MM((lo[1] + hi[1]) / 2), MM((lo[2] + hi[2]) / 2));
+  if (o.edges !== false) m.add(new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry), edgeMat));
+  if (o.check === false) m.userData.nocheck = true;
+  parent.add(m); tagPart(m, name, part, o.cat ?? part, o.ud); return m;
+}
+// цилиндр: центр c, радиус r, длина h вдоль оси axis
+function cy(parent, name, part, c, r, h, axis, color, o = {}) {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(MM(r), MM(r), MM(h), o.seg ?? 24), new THREE.MeshStandardMaterial({ color, roughness: o.rough ?? .45, metalness: o.metal ?? .2 }));
+  if (axis === 'x') m.rotation.z = Math.PI / 2; if (axis === 'z') m.rotation.x = Math.PI / 2;
+  m.position.set(MM(c[0]), MM(c[1]), MM(c[2]));
+  if (o.check === false) m.userData.nocheck = true;
+  parent.add(m); tagPart(m, name, part, o.cat ?? part, o.ud); return m;
+}
+function group(parent, pos = [0, 0, 0]) { const g = new THREE.Group(); g.position.set(MM(pos[0]), MM(pos[1]), MM(pos[2])); parent.add(g); return g; }
+
+// ---- серво PDI-HV5523MG: 40.5 x 20.2 x 38 мм, ушки 54.5 мм, вал 25T на 10.1 мм от торца ----
+// начало координат — ось вала на верхней крышке корпуса, вал +Z, корпус вниз, длинная сторона по X (корпус в сторону -X)
+function makeServo(name, part) {
   const g = new THREE.Group();
   const dark = new THREE.MeshStandardMaterial({ color: 0x23262d, roughness: .6, metalness: .1 });
   const steel = new THREE.MeshStandardMaterial({ color: 0xc9ccd2, roughness: .35, metalness: .8 });
   const lab = new THREE.MeshStandardMaterial({ color: 0xd9b000, roughness: .7 });
-  const mmv = v => v / 1000;
-  const body = new THREE.Mesh(new THREE.BoxGeometry(mmv(40.7), mmv(19.7), mmv(36.9 - 9.5)), dark);
-  body.position.set(mmv(-9.85), 0, mmv(-(36.9 - 9.5) / 2 - 9.5)); g.add(body);
-  const lower = body.clone(); lower.geometry = new THREE.BoxGeometry(mmv(40.7), mmv(19.7), mmv(9.5)); lower.position.z = mmv(-36.9 + 4.75); g.add(lower);
-  const flange = new THREE.Mesh(new THREE.BoxGeometry(mmv(54.4), mmv(19.7), mmv(2.5)), dark);
-  flange.position.set(mmv(-9.85), 0, mmv(-6.0)); g.add(flange);
-  for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
-    const h = new THREE.Mesh(new THREE.CylinderGeometry(mmv(2.3), mmv(2.3), mmv(2.7), 16), steel);
-    h.rotation.x = Math.PI / 2; h.position.set(mmv(-9.85 + sx * 24.7), mmv(sy * 5), mmv(-6.0)); g.add(h);
-  }
-  const boss = new THREE.Mesh(new THREE.CylinderGeometry(mmv(7), mmv(7), mmv(4), 32), dark); boss.rotation.x = Math.PI / 2; boss.position.z = mmv(2); g.add(boss);
-  const spl = new THREE.Mesh(new THREE.CylinderGeometry(mmv(3.2), mmv(3.2), mmv(4), 24), steel); spl.rotation.x = Math.PI / 2; spl.position.z = mmv(6); g.add(spl);
-  const gear = new THREE.Mesh(new THREE.CylinderGeometry(mmv(6), mmv(6), mmv(2.2), 24), dark); gear.rotation.x = Math.PI / 2; gear.position.set(mmv(-21), 0, mmv(1.1)); g.add(gear);
-  const sticker = new THREE.Mesh(new THREE.BoxGeometry(mmv(26), mmv(0.3), mmv(14)), lab); sticker.position.set(mmv(-9.85), mmv(10), mmv(-22)); g.add(sticker);
-  const sticker2 = sticker.clone(); sticker2.position.y = mmv(-10); g.add(sticker2);
-  g.traverse(o => { if (o.isMesh) { o.add(new THREE.LineSegments(new THREE.EdgesGeometry(o.geometry, 30), new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: .35 }))); } });
-  tagPart(g, name);
+  const add = (geo, mat, x, y, z, rx = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(MM(x), MM(y), MM(z)); m.rotation.x = rx; g.add(m); return m; };
+  add(new THREE.BoxGeometry(MM(40.5), MM(20.2), MM(38)), dark, -10.15, 0, -19);
+  add(new THREE.BoxGeometry(MM(54.5), MM(20.2), MM(2.5)), dark, -10.15, 0, -10.25);
+  for (const sx of [-1, 1]) for (const sy of [-1, 1]) add(new THREE.CylinderGeometry(MM(2.3), MM(2.3), MM(2.7), 16), steel, -10.15 + sx * 24.75, sy * 5, -10.25, Math.PI / 2);
+  add(new THREE.CylinderGeometry(MM(7), MM(7), MM(3), 32), dark, 0, 0, 1.5, Math.PI / 2).userData.horn = true;
+  add(new THREE.CylinderGeometry(MM(3), MM(3), MM(4), 24), steel, 0, 0, 5, Math.PI / 2).userData.horn = true;
+  add(new THREE.BoxGeometry(MM(26), MM(0.3), MM(14)), lab, -10.15, 10.2, -22);
+  add(new THREE.BoxGeometry(MM(26), MM(0.3), MM(14)), lab, -10.15, -10.2, -22);
+  g.traverse(o => { if (o.isMesh) o.add(new THREE.LineSegments(new THREE.EdgesGeometry(o.geometry, 30), edgeMat)); });
+  tagPart(g, name, part, 'servo');
   return g;
 }
 // поставить серво: вал в точку p (мм) вдоль d, длинная ось (в сторону -корпуса) вдоль l
-function mountServo(parent, name, p, d, l) {
-  const s = makeServo(name);
+function mountServo(parent, name, part, p, d, l) {
+  const s = makeServo(name, part);
   const D = new THREE.Vector3(...d).normalize(), Lv = new THREE.Vector3(...l).normalize();
   const Y = new THREE.Vector3().crossVectors(D, Lv).normalize();
   s.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(Lv, Y, D));
-  s.position.set(p[0] / 1000, p[1] / 1000, p[2] / 1000);
-  parent.add(s);
+  s.position.set(MM(p[0]), MM(p[1]), MM(p[2]));
+  parent.add(s); return s;
 }
 
-// ---- логотип: рельеф на верхней крышке (диск Ø40 мм, 1 мм + белые элементы ещё 1 мм = выступ 2 мм) ----
+// ---- логотип Ala-Too IT & Business College на верхней крышке: синий диск Ø40 мм 1 мм, красное +0.6 мм, белое +1 мм ----
+// logo.svg собирается из docs/logo_source.png скриптом tools/logo/make_logo.py
 let logoGroup = null;
 async function addLogo() {
-  const svgText = await (await fetch('logo.svg')).text();
+  const svgText = await (await fetch('logo.svg', { cache: 'no-cache' })).text();
   const data = new SVGLoader().parse(svgText);
-  const MM = 0.001, K = 40 / 512;                    // 512 px = 40 мм
+  const S = +data.xml.getAttribute('viewBox').split(/\s+/)[2], K = 40 / S;   // диаметр круга в SVG = 40 мм
   const g = new THREE.Group();
-  const navy = new THREE.MeshStandardMaterial({ color: 0x0b2a6b, roughness: .45, metalness: .1 });
-  const white = new THREE.MeshStandardMaterial({ color: 0xf1f1ee, roughness: .4, metalness: .05 });
-  const disk = new THREE.Mesh(new THREE.CylinderGeometry(20 * MM, 20 * MM, 1 * MM, 96), navy);
-  disk.rotation.x = Math.PI / 2; disk.position.z = 0.5 * MM; g.add(disk);
+  const mat = c => new THREE.MeshStandardMaterial({ color: c, roughness: .45, metalness: .05 });
+  const disk = new THREE.Mesh(new THREE.CylinderGeometry(MM(20), MM(20), MM(1), 96), mat(0x11225f));
+  disk.rotation.x = Math.PI / 2; disk.position.z = MM(0.5); g.add(disk);
   const flip = new THREE.Group(); flip.scale.y = -1; g.add(flip);   // ось Y в SVG направлена вниз
-  for (const p of data.paths) {
-    if (p.userData?.node?.id !== 'relief') continue;
-    for (const shape of SVGLoader.createShapes(p)) {
-      const geo = new THREE.ExtrudeGeometry(shape, { depth: 1, bevelEnabled: false, curveSegments: 5 });
-      // координаты фигуры в пикселях SVG -> мм: центр (256,256), ось Y SVG вниз
-      geo.translate(-256, -256, 0); geo.scale(K * MM, K * MM, MM);
-      const m = new THREE.Mesh(geo, white); m.position.z = 1 * MM; flip.add(m);
-    }
+  for (const [cls, color, h] of [['red', 0xcc2030, 0.6], ['relief', 0xf4f4f2, 1]]) {
+    const shapes = data.paths.filter(q => q.userData?.node?.getAttribute('class') === cls).flatMap(p => SVGLoader.createShapes(p));
+    if (!shapes.length) continue;
+    const geo = new THREE.ExtrudeGeometry(shapes, { depth: h, bevelEnabled: false, curveSegments: 4 });
+    geo.translate(-S / 2, -S / 2, 0); geo.scale(MM(K), MM(K), MM(1));
+    const m = new THREE.Mesh(geo, mat(color)); m.position.z = MM(1); flip.add(m);
   }
   g.rotation.z = -Math.PI / 2;                       // верх логотипа к носу собаки (+X)
   const holder = new THREE.Group(); holder.add(g);
   holder.position.set(0.010, 0, 0.036);              // плоский участок крышки: z = 36 мм
   robot.links.base_link.add(holder); logoGroup = holder;
-  holder.traverse(o => { if (o.isMesh) { o.userData.name = 'Логотип Ala-Too (рельеф, выступ 2 мм)'; pick.push(o); } });
+  holder.traverse(o => { if (o.isMesh) { Object.assign(o.userData, { name: 'Логотип Ala-Too IT & Business College (Ø40 мм, рельеф до 2 мм)', cat: 'logo' }); pick.push(o); } });
 }
 
-// ---- задняя надпись: убрать «K.D.Y», написать «ALA-TOO» ----
+// ---- задняя надпись «ALA-TOO»: гравировка K.D.Y залита в stl/backpart_filled.stl, надпись — parts/rear_text.stl (tools/mounts/make_rear.py) ----
 function addRearText() {
-  let bodyMat = null;
-  robot.links.rear_link.traverse(o => { if (!bodyMat && o.isMesh) bodyMat = o.material; });
-  stlLoader.load('parts/rear_patch.stl', g => {                  // заплатка по кривизне стенки: закрывает вырезанную надпись
-    g.scale(0.001, 0.001, 0.001); g.translate(-0.0004, 0, 0);          // чуть наружу, чтобы старая гравировка не просвечивала
-    const mat = bodyMat.clone(); mat.side = THREE.DoubleSide; mat.polygonOffset = true; mat.polygonOffsetFactor = -4; mat.polygonOffsetUnits = -4;
-    const patch = new THREE.Mesh(g, mat); robot.links.base_link.add(patch); shell.push(patch);
-  });
-  new FontLoader().load('lib/helvetiker_bold.typeface.json', font => {
-    const geo = new TextGeometry('ALA-TOO', { font, size: 3.7, height: 0.7, depth: 0.7, curveSegments: 8, bevelEnabled: true, bevelThickness: .05, bevelSize: .04, bevelSegments: 2 });
-    geo.computeBoundingBox(); const b = geo.boundingBox;
-    geo.translate(-(b.min.x + b.max.x) / 2, -(b.min.y + b.max.y) / 2, 0);
-    geo.scale(0.001, 0.001, 0.001);
-    const txt = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x0b2a6b, roughness: .45, metalness: .1 }));
-    // локальные оси текста -> база: X -> -Y, Y -> +Z, Z (выдавливание) -> -X (наружу, назад)
-    txt.matrix.makeBasis(new THREE.Vector3(0, -1, 0), new THREE.Vector3(0, 0, 1), new THREE.Vector3(-1, 0, 0));
-    txt.matrix.setPosition(-0.1473, 0.0205, -0.0200); txt.matrixAutoUpdate = false;
+  stlLoader.load('parts/rear_text.stl', g => {
+    g.scale(0.001, 0.001, 0.001);
+    const txt = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: 0x11225f, roughness: .45, metalness: .1 }));
     robot.links.base_link.add(txt); shell.push(txt);
-    txt.userData.name = 'Надпись ALA-TOO (рельеф)'; pick.push(txt);
+    Object.assign(txt.userData, { name: 'Надпись ALA-TOO (рельеф 0.8 мм, печатается вместе с крышкой)', cat: 'logo' }); pick.push(txt);
   });
 }
 
-// ===== схема по README mike4192/spotMicro =====
-// Pi 3B <-I2C-> PCA9685 -> 12 серв PDI-HV5523MG; LiPo 2S 4000 мАч напрямую на V+ платы серв;
-// UBEC HKU5 5V/5A питает Pi, логику PCA9685 и LCD 16x2 I2C (0x27).
-const servos = [];            // { g: Group, ch: номер канала PCA (0..11), name }
-const wires = [];             // { mesh, build() -> {pts, r, color}, name }
-const V3 = (a) => new THREE.Vector3(a[0] / 1000, a[1] / 1000, a[2] / 1000);
-const PI_AT = [0, -15, -2], PCA_AT = [-5, 38, -4];
-// контакты Pi 3B (мм, система base_link): гребёнка GPIO на длинной стороне платы, пин 1 у края с SD-картой
-function piPin(n) {
-  const c = Math.floor((n - 1) / 2), odd = n % 2 === 1;
-  return [PI_AT[0] - 46.4 + 7.1 + 2.54 * c, PI_AT[1] - 29.2 + (odd ? 50.1 : 52.6), PI_AT[2] + 11.5];
-}
-// PCA9685: 16 каналов по 3 контакта на нижней стороне платы; группы по 4
+// ===== компоновка по списку деталей от 23.10.2026 =====
+// Pi 3B <-I2C-> PCA9685 (0x40), MPU-6050 (0x68), LCD 16x2 (0x27), ADS1115 (0x48, опция) -> 12 серв PDI-HV5523MG.
+// Силовая цепь: LiPo -> XT60 -> предохранитель 15 А -> выключатель -> Y-разветвитель -> PCA9685 V+ (с конденсатором) и UBEC 5V/5A.
+const servos = [];            // { g, ch, name, leg, kind }
+const wires = [];             // { mesh, name, r, pts | dyn, check }
+const V3 = (a) => new THREE.Vector3(MM(a[0]), MM(a[1]), MM(a[2]));
+
+// Raspberry Pi 3B: плата 85×56, начало — левый нижний угол (вид сверху, гребёнка сверху, USB справа), низ платы z = 0
+const PI0 = [-48, -47.5, -2];                         // угол платы в base_link; низ платы на 5 мм над плитой; отверстия 58×49 мимо бобышек Arduino на плите
+const piB = (x, y, z) => [PI0[0] + x, PI0[1] + y, PI0[2] + z];
+function piPin(n) { const c = Math.floor((n - 1) / 2); return piB(8.37 + 2.54 * c, n % 2 ? 51.23 : 53.77, 1.4 + 8.5); }
+const PI_USB = { A: piB(87.1, 47, 12.3), B: piB(87.1, 29, 12.3) };    // верхние порты USB (стопки на Y=47 и Y=29)
+const PI_CSI = piB(45, 15.25, 7);
+// PCA9685 (CAD Adafruit 815): 16 каналов по 3 контакта со стороны Pi, группы по 4; клеммник V+ с другой стороны
+const PCA_AT = [-5, 38, -4];
 const GST = [-25, -12.9, 2.3, 15.6];
 function pcaCh(c, row) {      // row: 0 GND, 1 V+, 2 PWM
   const g = Math.floor(c / 4), k = c % 4;
@@ -176,53 +184,109 @@ function pcaCh(c, row) {      // row: 0 GND, 1 V+, 2 PWM
 }
 const PCA_VPLUS = [PCA_AT[0] - 2.2, PCA_AT[1] + 9, PCA_AT[2] + 12.5], PCA_VGND = [PCA_AT[0] + 2.2, PCA_AT[1] + 9, PCA_AT[2] + 12.5];
 const PCA_I2C = { SDA: [PCA_AT[0] - 22, PCA_AT[1] + 11, PCA_AT[2] + 5], SCL: [PCA_AT[0] - 19.5, PCA_AT[1] + 11, PCA_AT[2] + 5], VCC: [PCA_AT[0] - 17, PCA_AT[1] + 11, PCA_AT[2] + 5], GND: [PCA_AT[0] - 14.5, PCA_AT[1] + 11, PCA_AT[2] + 5] };
-const UBEC_AT = [58, 38, 0];
-const UBEC_OUT = { V: [UBEC_AT[0] - 26, UBEC_AT[1] - 5, 7], G: [UBEC_AT[0] - 26, UBEC_AT[1] + 5, 7] };
-const UBEC_IN = { V: [UBEC_AT[0] + 26, UBEC_AT[1] - 5, 7], G: [UBEC_AT[0] + 26, UBEC_AT[1] + 5, 7] };
+const PCA_I2C2 = { GND: [PCA_AT[0] + 14.5, PCA_AT[1] + 11, PCA_AT[2] + 5], VCC: [PCA_AT[0] + 17, PCA_AT[1] + 11, PCA_AT[2] + 5], SCL: [PCA_AT[0] + 19.5, PCA_AT[1] + 11, PCA_AT[2] + 5], SDA: [PCA_AT[0] + 22, PCA_AT[1] + 11, PCA_AT[2] + 5] };
+// MPU-6050 (GY-521 21.2×16.4) на стойках 4 мм справа от PCA, гребёнка со стороны Pi
+const MPU_AT = [37.5, 33, -3];
+const MPU_PIN = Object.fromEntries(['VCC', 'GND', 'SCL', 'SDA', 'XDA', 'XCL', 'AD0', 'INT'].map((n, i) => [n, [MPU_AT[0] - 8.89 + 2.54 * i, MPU_AT[1] - 6.9, MPU_AT[2] + 7.6]]));
+// нижний отсек (между плитой z -10 и дном z -36): аккумулятор по центру, UBEC слева, разветвитель и ADS1115 справа
+const BATT = { lo: [-57, -23.5, -35.5], hi: [58, 23.5, -10.5] };     // предел отсека 127×48×26 мм
+const UBEC = { lo: [-15, 25.5, -23], hi: [30, 47.5, -11] };
+const UBEC_IN = { V: [30.5, 34, -17], G: [30.5, 39, -17] }, UBEC_OUT = { V: [-15.5, 34, -17], G: [-15.5, 39, -17] };
+const YS = { lo: [-56, -46, -22], hi: [-16, -28, -12] };
+const ADS_AT = [32, -38.25, -14.6];
+const ADS_PIN = Object.fromEntries(['VDD', 'GND', 'SCL', 'SDA', 'ADDR', 'ALRT', 'A0', 'A1', 'A2', 'A3'].map((n, i) => [n, [ADS_AT[0] - 11.43 + 2.54 * i, ADS_AT[1] + 7.3, ADS_AT[2] - 6]]));
+const XT = { lo: [-98, -8, -23.5], hi: [-70, 8, -15.5] };          // XT60 аккумулятора, в проходе под задними плечевыми серво
+// задняя крышка: окно LCD, под ним отверстие выключателя 19×13 мм (центр y -25.6, z -20.4) и держатель предохранителя
 const LCD_AT = [-141, 0, 5.5];
 const LCD_PIN = { GND: [-136, 22, -2], VCC: [-136, 24.5, -2], SDA: [-136, 27, -2], SCL: [-136, 29.5, -2] };
-const BATT_END = [-69.5, 0, -23];
+const FUSE = { lo: [-141, -12, -27], hi: [-127, 28, -17] };
+const SW_AT = [-147.79, -25.6, -20.4], SW_TILT = -0.0765;          // наружная грань стенки, наклон стенки 4.4°
+const SW_T = { A: [-121.6, -21.6, -20.4], B: [-121.6, -29.6, -20.4] };
+const BUZZ = { lo: [-45, -2, 21], hi: [-5, 23, 32] };              // на внутренней стороне верхней крышки
+const SPK = { lo: [122, 18, -20], hi: [138, 36, 15] };              // левая «щека» морды, звук вперёд
 
-function makeWire(name, color, r, pts, extra = {}) {
-  const mat = new THREE.MeshStandardMaterial({ color, roughness: .5, metalness: .1 });
-  const mesh = new THREE.Mesh(new THREE.BufferGeometry(), mat);
-  mesh.userData.name = name; mesh.userData.wire = true; pick.push(mesh);
-  const w = { mesh, name, r, pts, dyn: extra.dyn || null };
-  wires.push(w); robot.links.base_link.add(mesh);
-  rebuildWire(w);
-  return w;
-}
-function rebuildWire(w) {
-  const pts = (w.dyn ? w.dyn() : w.pts).map(V3);
-  const curve = new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.3);
-  const g = new THREE.TubeGeometry(curve, Math.max(10, pts.length * 5), w.r / 1000, 5, false);
-  w.mesh.geometry.dispose(); w.mesh.geometry = g;
-}
-// маршрут между двумя точками с подъёмом над платой
-function route(a, b, lift = 8) { const m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, Math.max(a[2], b[2]) + lift]; return [a, [a[0], a[1], a[2] + 4], m, [b[0], b[1], b[2] + 4], b]; }
-
-function boxPart(name, w, d, h, color, parent, pos, rough = .55) {
-  const m = new THREE.Mesh(new THREE.BoxGeometry(w / 1000, d / 1000, h / 1000), new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: .1 }));
-  m.position.set(pos[0] / 1000, pos[1] / 1000, pos[2] / 1000); parent.add(m); tagPart(m, name);
-  m.add(new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry), new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: .4 }))); return m;
-}
 function addElectronics() {
-  const base = robot.links.base_link;               // X вперёд, Y влево, Z вверх; плита корпуса z ≈ -10…-7 мм
-  // --- аккумулятор LiPo 2S 4000 мАч (≈139×48×26 мм) в нижней полости ---
-  boxPart('LiPo 2S 4000 мАч, 7.4 В (по README)', 139, 48, 26, 0x1b4fa8, base, [0, 0, -23], .6);
-  boxPart('LiPo 2S (наклейка)', 60, 48.6, 26.4, 0xe8e8e8, base, [0, 0, -23], .6);
-  boxPart('LiPo 2S (разъём XT60)', 14, 18, 10, 0xe6c000, base, [-76.5, 0, -23], .5);
-  // --- UBEC HKU5 5V/5A ---
-  boxPart('UBEC HKU5 5V/5A (габариты ≈, CAD не найден)', 50, 26, 13, 0x1c1c20, base, [UBEC_AT[0], UBEC_AT[1], -7 + 6.5], .5);
-  boxPart('UBEC (наклейка)', 30, 26.4, 8, 0xd8a300, base, [UBEC_AT[0], UBEC_AT[1], -7 + 6.5], .6);
-  // --- LCD 16×2 I2C (0x27) за окном задней крышки ---
-  boxPart('LCD 16×2 I²C, адрес 0x27 (плата)', 3, 80, 36, 0x1d6b3a, base, [LCD_AT[0] + 3.5, LCD_AT[1], LCD_AT[2]], .6);
-  boxPart('LCD 16×2 (рамка)', 6, 71, 24, 0x15171c, base, [LCD_AT[0] - 1, LCD_AT[1], LCD_AT[2]], .5);
-  boxPart('LCD 16×2 (экран)', 1, 64.5, 13.8, 0x9fd6b8, base, [LCD_AT[0] - 4.2, LCD_AT[1], LCD_AT[2]], .3);
-  boxPart('I²C-переходник PCF8574 (LCD)', 10, 36, 14, 0x2a64d6, base, [LCD_AT[0] + 12, 26, -4], .6);
-  pending = 2;
-  loadPart('pi_c.stl', 0x2f9e57, 'Raspberry Pi (CAD: Pi 4B; в проекте Pi 3B, плата 85×56 та же)', base, PI_AT, 0);
-  loadPart('pca_c.stl', 0x2b64d6, 'PCA9685, 16-канальный драйвер серв (CAD Adafruit 815), I²C 0x40', base, PCA_AT, 0);
+  const base = robot.links.base_link;
+  // --- Raspberry Pi 3B (по механическому чертежу) + microSD ---
+  const pi = group(base, PI0), PI = 'Raspberry Pi 3B';
+  const silver = 0xb9bdc4, blk = 0x1c1d21;
+  bx(pi, `${PI}: плата 85×56 мм`, 'pi', [0, 0, 0], [85, 56, 1.4], 0x2f9e57, { rough: .6 });
+  bx(pi, `${PI}: GPIO 40 pin`, 'pi', [7.1, 50.2, 1.4], [57.9, 55.3, 3.9], blk);
+  for (let n = 1; n <= 40; n++) { const p = piPin(n); bx(pi, `${PI}: GPIO pin ${n}`, 'pi', [p[0] - PI0[0] - .32, p[1] - PI0[1] - .32, 3.9], [p[0] - PI0[0] + .32, p[1] - PI0[1] + .32, 9.9], 0xd4af37, { edges: false, metal: .8, check: false }); }
+  bx(pi, `${PI}: USB 2.0 ×2 (порты 1–2)`, 'pi', [69.7, 40.45, 1.4], [87.1, 53.55, 17], silver, { metal: .7 });
+  bx(pi, `${PI}: USB 2.0 ×2 (порты 3–4)`, 'pi', [69.7, 22.45, 1.4], [87.1, 35.55, 17], silver, { metal: .7 });
+  bx(pi, `${PI}: Ethernet`, 'pi', [65.8, 2.25, 1.4], [87.1, 18.25, 14.9], silver, { metal: .7 });
+  bx(pi, `${PI}: HDMI`, 'pi', [24.5, -1, 1.4], [39.5, 10.5, 7.9], silver, { metal: .7 });
+  bx(pi, `${PI}: micro-USB питание (не используется, 5 В идёт на GPIO)`, 'pi', [6.6, -1, 1.4], [14.6, 4.6, 4.4], silver, { metal: .7 });
+  bx(pi, `${PI}: аудио 3.5 мм`, 'pi', [50, -2.5, 1.4], [57, 12, 7.4], blk);
+  bx(pi, `${PI}: разъём камеры CSI`, 'pi', [35, 12.5, 1.4], [55, 18, 7], 0xe9e4d8);
+  bx(pi, `${PI}: разъём дисплея DSI`, 'pi', [1.5, 17, 1.4], [6.5, 39, 7], 0xe9e4d8);
+  bx(pi, `${PI}: процессор BCM2837`, 'pi', [22, 25, 1.4], [36, 39, 2.6], 0x55585e, { edges: false });
+  bx(pi, `${PI}: слот microSD`, 'pi', [0.5, 20.5, -1.5], [14, 35.5, 0], silver, { metal: .7 });
+  bx(pi, 'microSD 16–32 ГБ', 'pi', [-2.5, 22, -1.2], [12, 33, -0.4], 0x2b2f8f, { cat: 'sd' });
+  for (const [x, y] of [[3.5, 3.5], [61.5, 3.5], [3.5, 52.5], [61.5, 52.5]]) cy(pi, `${PI}: стойка M2.5×5 + винт M2.5×10 (отверстия в плите сверлить)`, 'pi', [x, y, -2.5], 2.4, 5, 'z', 0xc9a227, { seg: 6, metal: .7, ud: { mount: true } });
+
+  // --- PCA9685 + конденсатор 2200 мкФ 16 В на клеммнике V+ ---
+  loadPart('pca_c.stl', 0x2b64d6, 'PCA9685, 16-канальный драйвер серв (CAD Adafruit 815), I²C 0x40, логика 3.3 В', 'pca', base, PCA_AT);
+  cy(base, 'Конденсатор 2200 мкФ 16 В на клеммнике V+/GND PCA9685 (гасит броски от серв)', 'cap', [-18, 38, 4.85], 6.25, 25, 'x', 0x1d3f8f, { ud: { touch: ['pca'] } });
+
+  // --- MPU-6050 (GY-521) ---
+  const mpu = group(base, MPU_AT), MP = 'MPU-6050 (GY-521), I²C 0x68';
+  bx(mpu, `${MP}: плата 21.2×16.4`, 'mpu', [-10.6, -8.2, 0], [10.6, 8.2, 1.6], 0x1f4fbf, { rough: .6 });
+  bx(mpu, `${MP}: датчик`, 'mpu', [-2, -2, 1.6], [2, 2, 2.5], 0x222222, { edges: false });
+  bx(mpu, `${MP}: гребёнка 8 pin`, 'mpu', [-10.2, -8.2, 1.6], [10.2, -5.6, 4.1], 0x1c1d21);
+  for (const x of [-7.6, 7.6]) cy(mpu, `${MP}: стойка M3 4 мм`, 'mpu', [x, 5.5, -2.025], 2.5, 4.05, 'z', 0xeeeeee, { seg: 12, ud: { mount: true } });
+  for (const n of Object.keys(MPU_PIN)) { const p = MPU_PIN[n]; bx(mpu, `${MP}: pin ${n}`, 'mpu', [p[0] - MPU_AT[0] - .32, p[1] - MPU_AT[1] - .32, 4.1], [p[0] - MPU_AT[0] + .32, p[1] - MPU_AT[1] + .32, 7.6], 0xd4af37, { edges: false, check: false }); }
+
+  // --- камера Raspberry Pi v2 на печатном кронштейне в морде ---
+  const L = layout.camera, cam = new THREE.Group(), CM = 'Raspberry Pi Camera v2';
+  cam.matrix.makeBasis(new THREE.Vector3(...L.axis), new THREE.Vector3(0, 1, 0), new THREE.Vector3(...L.up)).setPosition(V3(L.origin));
+  cam.matrixAutoUpdate = false; base.add(cam);
+  const yc = L.yc, bl = L.h / 2 - 9.46;                  // объектив ≈ 9.5 мм от верхнего края
+  bx(cam, `${CM}: плата 25×23.9`, 'cam', [0, yc - L.w / 2, -L.h / 2], [1, yc + L.w / 2, L.h / 2], 0x2f9e57, { ud: { touch: ['cammount'] } });
+  bx(cam, `${CM}: модуль объектива 8.5×8.5`, 'cam', [1, yc - 4.25, bl - 4.25], [4.5, yc + 4.25, bl + 4.25], 0x1c1d21);
+  cy(cam, `${CM}: объектив`, 'cam', [5, yc, bl], 3, 1, 'x', 0x0a0a12, { metal: .9, rough: .1 });
+  bx(cam, `${CM}: разъём шлейфа`, 'cam', [-2.7, yc - 10.5, -L.h / 2], [0, yc + 10.5, -L.h / 2 + 5.5], 0xe9e4d8, { ud: { touch: ['cammount'] } });
+  for (const [y, b] of L.holes) cy(cam, `${CM}: винт M2×6 + гайка в бобышке`, 'cam', [1.6, y, b], 1.9, 1.2, 'x', 0xc9ccd2, { seg: 12, metal: .8, check: false });
+  loadPart('cam_mount.stl', 0xe07a1f, 'Кронштейн камеры (печать, print/cam_mount.stl): на рёбра морды, наклон 10° вниз', 'cammount', base, [0, 0, 0], {}, { nocheck: true });
+  addFov(cam, yc, bl);
+
+  // --- LCD 16×2 I²C (0x27) за окном задней крышки ---
+  bx(base, 'LCD 16×2 I²C, адрес 0x27 (плата)', 'lcd', [LCD_AT[0] + 2, -40, LCD_AT[2] - 18], [LCD_AT[0] + 5, 40, LCD_AT[2] + 18], 0x1d6b3a, { rough: .6 });
+  bx(base, 'LCD 16×2 (рамка)', 'lcd', [LCD_AT[0] - 4, -35.5, LCD_AT[2] - 12], [LCD_AT[0] + 2, 35.5, LCD_AT[2] + 12], 0x15171c);
+  bx(base, 'LCD 16×2 (экран)', 'lcd', [LCD_AT[0] - 4.7, -32.25, LCD_AT[2] - 6.9], [LCD_AT[0] - 3.7, 32.25, LCD_AT[2] + 6.9], 0x9fd6b8, { rough: .3, ud: { touch: ['lcd'] } });
+  bx(base, 'I²C-переходник PCF8574 (LCD), питание 5 В', 'lcd', [-134, 8, -11], [-124, 44, 3], 0x2a64d6, { rough: .6 });
+
+  // --- питание ---
+  bx(base, 'LiPo 2S 4000 мАч, 7.4 В — допустимый габарит ≤ 115×47×25 мм (139 мм не входит!)', 'batt', BATT.lo, BATT.hi, 0x1b4fa8, { rough: .6, ud: { note: 'до плиты 0.5 мм: высота аккумулятора не больше 25–26 мм' } });
+  bx(base, 'LiPo 2S (наклейка)', 'batt', [-30, -23.8, -35.8], [30, 23.8, -10.2], 0xe8e8e8, { rough: .6, check: false });
+  bx(base, 'XT60: разъём аккумулятора (папа+мама)', 'xt60', XT.lo, XT.hi, 0xe6c000, { rough: .5 });
+  bx(base, 'Y-разветвитель XT60: PCA9685 V+ и UBEC', 'xt60', YS.lo, YS.hi, 0xe6c000, { rough: .5 });
+  bx(base, 'Держатель предохранителя (ATC), провод 14 AWG', 'fuse', FUSE.lo, FUSE.hi, 0x1c1c20, { rough: .5 });
+  bx(base, 'Предохранитель 15 А (синий)', 'fuse', [-138, -2, -17], [-130, 18, -13.5], 0x2a6fdb, { rough: .4 });
+  const sw = group(base, SW_AT); sw.rotation.y = SW_TILT;
+  const SWN = 'Выключатель 19×13 мм (мини-рокер, ≥16 А @12 В DC) в штатном отверстии';
+  bx(sw, `${SWN}: рамка`, 'sw', [-2.5, -10.5, -7.5], [0, 10.5, 7.5], 0x111111, { ud: { note: 'в отверстии 19×13 мм зазор ~0.2 мм — так и надо; от клемм до перегородки 0.6 мм, провода паять и отводить вбок' } });
+  bx(sw, `${SWN}: клавиша`, 'sw', [-5, -8, -5.5], [-2.5, 8, 5.5], 0xc0262d);
+  bx(sw, `${SWN}: корпус`, 'sw', [0, -9.3, -6.3], [18, 9.3, 6.3], 0x222222, { ud: { note: 'в отверстии 19×13 мм зазор ~0.2 мм — так и надо; от клемм до перегородки 0.6 мм, провода паять и отводить вбок' } });
+  for (const y of [-4, 4]) bx(sw, `${SWN}: клемма 4.8 мм`, 'sw', [18, y - .4, -2.4], [26, y + .4, 2.4], 0xd0d3d8, { metal: .8 });
+  bx(base, 'UBEC 5V/5A (≈45×22×12): питание Pi, LCD, камеры, USB', 'ubec', UBEC.lo, UBEC.hi, 0x1c1c20, { rough: .5 });
+  bx(base, 'UBEC (наклейка)', 'ubec', [-5, 25.2, -22], [20, 47.8, -12], 0xd8a300, { rough: .6, check: false });
+  bx(base, 'Пищалка разряда LiPo (на балансировочном разъёме), приклеена к крышке', 'buzz', BUZZ.lo, BUZZ.hi, 0x1c1c20, { rough: .5 });
+  cy(base, 'Пищалка: излучатель', 'buzz', [-25, 10.5, 20.5], 6, 1, 'z', 0x333333, { check: false });
+
+  // --- голос ---
+  bx(base, 'USB-микрофон (донгл в верхнем USB-порту, выступ 10 мм)', 'mic', [PI_USB.A[0], PI_USB.A[1] - 6.5, PI_USB.A[2] - 3], [PI_USB.A[0] + 10, PI_USB.A[1] + 6.5, PI_USB.A[2] + 3], 0x30343c, { ud: { touch: ['pi'] } });
+  bx(base, 'USB-штекер 90° вверх (кабель динамика) — прямой штекер упрётся в серво', 'spk', [PI_USB.B[0], PI_USB.B[1] - 7, PI_USB.B[2] - 4], [PI_USB.B[0] + 11, PI_USB.B[1] + 7, 25], 0x30343c, { cat: 'spk', ud: { touch: ['pi'] } });
+  bx(base, 'USB-динамик компактный (≈18×20×35), звук через открытую морду', 'spk', SPK.lo, SPK.hi, 0x30343c);
+  bx(base, 'USB-динамик: решётка', 'spk', [138, 20, -16], [138.6, 34, 11], 0x777b84, { check: false });
+
+  // --- опция: ADS1115 под плитой + делитель ---
+  const ads = group(base, ADS_AT), AD = 'ADS1115 (опция), I²C 0x48: напряжение батареи';
+  bx(ads, `${AD}: плата 28×17.5`, 'ads', [-14, -8.75, 0], [14, 8.75, 1.6], 0x7b3fb5, { rough: .6, ud: { opt: true } });
+  bx(ads, `${AD}: гребёнка 10 pin (вниз)`, 'ads', [-12.8, 6, -2.5], [12.8, 8.6, 0], 0x1c1d21, { ud: { opt: true } });
+  for (const x of [-11, 11]) cy(ads, `${AD}: стойка M2.5 3 мм к низу плиты`, 'ads', [x, -5, 3.075], 2, 2.95, 'z', 0xc9a227, { seg: 6, ud: { opt: true, mount: true } });
+  for (const [i, x] of [[0, -4], [1, 4]]) cy(base, `Делитель для ADS1115 (опция): резистор ${i ? 'R2 10 кОм' : 'R1 20 кОм'}`, 'ads', [ADS_AT[0] + x, ADS_AT[1] - 3, ADS_AT[2] - 4], 1.2, 6, 'x', 0xd8c39a, { check: false, ud: { opt: true } });
 
   // --- 12 серв PDI-HV5523MG: нумерация и каналы из spot_micro_motion_cmd.yaml ---
   const sides = { front_left: [1, 1], front_right: [1, -1], rear_left: [-1, 1], rear_right: [-1, -1] };
@@ -230,85 +294,272 @@ function addElectronics() {
   const LEGN = { front_left: 'LF', front_right: 'RF', rear_left: 'LB', rear_right: 'RB' };
   for (const [leg, [fx, sy]] of Object.entries(sides)) {
     const sh = robot.joints[`${leg}_shoulder`], lg = robot.joints[`${leg}_leg`], kn = robot.joints[`${leg}_foot`];
-    const mk = (parent, nm, kind, num, p, d, l) => {
-      const label = `Серво ${LEGN[leg]}_${kind === 'плечо' ? 1 : kind === 'бедро' ? 2 : 3} (${kind}) №${num} → канал PCA ${num - 1}, PDI-HV5523MG`;
-      mountServo(parent, label, p, d, l);
-      servos.push({ g: parent.children[parent.children.length - 1], ch: num - 1, name: label });
+    const mk = (parent, kind, i, num, p, d, l) => {
+      const label = `Серво ${LEGN[leg]}_${i} (${kind}) №${num} → канал PCA ${num - 1}, PDI-HV5523MG`;
+      const g = mountServo(parent, label, `servo_${LEGN[leg]}_${i}`, p, d, l);
+      servos.push({ g, ch: num - 1, name: label, leg, kind: i, fx, sy });
     };
-    mk(sh, 'plecho', 'плечо', NUM[leg][0], [0, 0, 0], [fx, 0, 0], [0, sy, 0]);
-    mk(sh, 'bedro', 'бедро', NUM[leg][1], [0, sy * 55, 0], [0, sy, 0], [fx, 0, 0]);
-    mk(lg, 'koleno', 'колено', NUM[leg][2], [0, 0, -107.5], [0, sy, 0], [0, 0, -1]);
+    // гнёзда по STL: плечевой — в кронштейне плеча, качалка в переборке (ось y ±39, z 8, подшипник F625zz в стенке x ±68);
+    // бедренный — в верхней части бедра (наклон 8° как у детали), вал внутрь; коленный — в голени у колена, вал внутрь
+    mk(sh, 'плечо', 1, NUM[leg][0], [fx * 19, 0, 8], [fx, 0, 0], [0, 0, 1]);
+    mk(lg, 'бедро', 2, NUM[leg][1], [-2, -sy * 26, 0], [0, -sy, 0], [0.139, 0, 1]);
+    mk(kn, 'колено', 3, NUM[leg][2], [0, -sy * 18.5, 0], [0, -sy, 0], [0, 0, 1]);
   }
   buildWiring();
 }
 
+// поле зрения камеры v2: 62.2° × 48.8°
+let fovLines = null, lensAt = null;
+const FOV_H = 62.2 / 2 * Math.PI / 180, FOV_V = 48.8 / 2 * Math.PI / 180;
+function addFov(cam, yc, bl) {
+  lensAt = [5.5, yc, bl];
+  const d = 300, pts = [];
+  const corner = (sh, sv) => [lensAt[0] + d, yc + sh * d * Math.tan(FOV_H), bl + sv * d * Math.tan(FOV_V)];
+  const C = [corner(1, 1), corner(-1, 1), corner(-1, -1), corner(1, -1)];
+  for (let i = 0; i < 4; i++) pts.push(lensAt, C[i], C[i], C[(i + 1) % 4]);
+  fovLines = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts.map(V3)), new THREE.LineBasicMaterial({ color: 0x3fd0ff, transparent: true, opacity: .8 }));
+  fovLines.visible = false; cam.add(fovLines);
+}
+
 // ===== провода =====
+function makeWire(name, color, r, pts, extra = {}) {
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: .5, metalness: .1 });
+  const mesh = new THREE.Mesh(new THREE.BufferGeometry(), mat);
+  Object.assign(mesh.userData, { name, wire: true, cat: extra.cat ?? 'wire', opt: extra.opt });
+  pick.push(mesh);
+  const w = { mesh, name, r, pts, dyn: extra.dyn || null, flat: extra.flat || 0, check: !extra.dyn && extra.check !== false, len: 0 };
+  wires.push(w); robot.links.base_link.add(mesh);
+  rebuildWire(w);
+  return w;
+}
+function wireCurve(w) { return new THREE.CatmullRomCurve3((w.dyn ? w.dyn() : w.pts).map(V3), false, 'catmullrom', 0.3); }
+function rebuildWire(w) {
+  const curve = wireCurve(w), n = Math.max(10, curve.points.length * 6);
+  w.len = curve.getLength() * 1000;
+  let g;
+  if (w.flat) {                                     // плоский шлейф: лента шириной flat мм
+    const P = curve.getSpacedPoints(n * 2), pos = [], idx = [];
+    let side = new THREE.Vector3(0, 1, 0);
+    for (let i = 0; i < P.length; i++) {
+      const t = curve.getTangentAt(i / (P.length - 1));
+      const want = Math.abs(t.z) > 0.7 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(-t.y, t.x, 0).normalize();   // в вертикальных участках — поперёк X (как входит в CSI)
+      side.lerp(want.dot(side) < 0 ? want.negate() : want, 0.25).normalize();
+      const h = side.clone().multiplyScalar(MM(w.flat / 2));
+      pos.push(...P[i].clone().add(h).toArray(), ...P[i].clone().sub(h).toArray());
+      if (i) { const a = 2 * i; idx.push(a - 2, a - 1, a, a - 1, a + 1, a); }
+    }
+    g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
+    w.mesh.material.side = THREE.DoubleSide;
+  } else g = new THREE.TubeGeometry(curve, n, MM(w.r), 6, false);
+  w.mesh.geometry.dispose(); w.mesh.geometry = g;
+}
+// маршрут между двумя точками с подъёмом над платой
+function route(a, b, lift = 8) { const m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, Math.max(a[2], b[2]) + lift]; return [a, [a[0], a[1], a[2] + 4], m, [b[0], b[1], b[2] + 4], b]; }
+const up = (p, dz) => [p[0], p[1], p[2] + dz];
+
 function buildWiring() {
-  const RED = 0xd62828, BLK = 0x1a1a1a, BLU = 0x2a6fdb, YEL = 0xf2c200, ORG = 0xff8c1a, BRN = 0x7a4a21, GRN = 0x2a9d3a;
-  // питание серв: LiPo -> клеммник V+ платы PCA9685 (напрямую)
-  const bp = [BATT_END[0] - 7, 7, BATT_END[2]], bm = [BATT_END[0] - 7, -7, BATT_END[2]];
-  makeWire('Силовой провод: LiPo (+) 7.4 В → PCA9685 клемма V+ (питание серв)', RED, 1.7, [bp, [-82, 18, -20], [-84, 40, -4], [-60, 52, 14], [PCA_VPLUS[0] - 14, PCA_VPLUS[1] + 8, PCA_VPLUS[2] + 8], PCA_VPLUS]);
-  makeWire('Силовой провод: LiPo (−) → PCA9685 клемма GND', BLK, 1.7, [bm, [-83, -18, -20], [-85, 8, -2], [-70, 50, 14], [PCA_VGND[0] - 6, PCA_VGND[1] + 9, PCA_VGND[2] + 8], PCA_VGND]);
-  // LiPo -> вход UBEC
-  makeWire('LiPo (+) → вход UBEC HKU5', RED, 1.2, [[-82, 14, -20], [-84, 30, -8], [-30, 50, 12], [20, 62, 14], UBEC_IN.V]);
-  makeWire('LiPo (−) → вход UBEC HKU5', BLK, 1.2, [[-83, -14, -20], [-86, 0, -2], [-40, 54, 16], [24, 66, 16], UBEC_IN.G]);
-  // UBEC 5 В -> Pi (pin 2 = 5V, pin 6 = GND)
-  makeWire('UBEC 5V → Raspberry Pi, pin 2 (5V)', RED, 1.0, route(UBEC_OUT.V, piPin(2), 14));
-  makeWire('UBEC GND → Raspberry Pi, pin 6 (GND)', BLK, 1.0, route(UBEC_OUT.G, piPin(6), 16));
-  // UBEC 5 В -> логика PCA9685 (VCC, GND)
-  makeWire('UBEC 5V → PCA9685 VCC (логика)', RED, 1.0, route(UBEC_OUT.V, PCA_I2C.VCC, 14));
-  makeWire('UBEC GND → PCA9685 GND (логика)', BLK, 1.0, route(UBEC_OUT.G, PCA_I2C.GND, 17));
-  // I2C: Pi pin 3 (GPIO2/SDA1) и pin 5 (GPIO3/SCL1) -> PCA9685 -> LCD
+  const RED = 0xd62828, BLK = 0x1a1a1a, BLU = 0x2a6fdb, YEL = 0xf2c200, ORG = 0xff8c1a, BRN = 0x7a4a21, GRN = 0x2a9d3a, WHT = 0xdddddd, GRY = 0x6b6f78, PUR = 0x9b59b6;
+  const P14 = 1.65, P = 'Силовая цепь 14 AWG: ';
+  // аккумулятор -> XT60 (выводы с заднего торца)
+  makeWire('Выводы LiPo (+) → XT60', RED, P14, [[BATT.lo[0], 5, -18], [-62, 5, -19], [XT.hi[0], 4, -19.5]]);
+  makeWire('Выводы LiPo (−) → XT60', BLK, P14, [[BATT.lo[0], -5, -18], [-62, -5, -19], [XT.hi[0], -4, -19.5]]);
+  // XT60 (+) -> предохранитель -> выключатель -> Y-разветвитель
+  makeWire(P + 'XT60 (+) → предохранитель 15 А', RED, P14, [[XT.lo[0], 4, -19.5], [-108, 8, -18], [-118, 12, -18], [-124, 31, -22], [-134, 31, -22], [-134, 28.5, -22]]);
+  makeWire(P + 'предохранитель → выключатель (клемма 1, пайка — до перегородки 0.6 мм)', RED, P14, [[-134, -12.5, -22], [-131, -16, -22], [-124, -18.5, -21], [-122.5, -20.5, -20.4], SW_T.A]);
+  makeWire(P + 'выключатель (клемма 2) → Y-разветвитель (+)', RED, P14, [SW_T.B, [-123, -27, -19], [-124, -16, -17], [-112, -12, -17], [-67, -11, -17], [-62, -15, -17], [-60.5, -30, -17], [YS.lo[0] - 1, -35, -17]]);
+  makeWire(P + 'XT60 (−) → Y-разветвитель (−)', BLK, P14, [[XT.lo[0], -4, -19.5], [-104, -9, -19], [-80, -14, -19], [-67, -14, -19], [-62, -17, -19], [-60.5, -32, -18], [YS.lo[0] - 1, -40, -17]]);
+  // Y-разветвитель -> PCA9685 V+ (через щель за плитой x≈-51), -> UBEC (вокруг переднего торца аккумулятора)
+  for (const [nm, col, dy, tgt] of [['(+) → PCA9685 V+', RED, -1.5, PCA_VPLUS], ['(−) → PCA9685 GND', BLK, 1.5, PCA_VGND]])
+    makeWire(P + 'Y-разветвитель ' + nm, col, P14, [[YS.lo[0] - 1, -43 + dy, -17], [-57 + dy, -40, -12], [-57 + dy, -20, 2], [-57 + dy, 30, 4], [-46, 44 + dy, 12], [tgt[0], 45 + dy, 13], tgt]);
+  for (const [nm, col, dy, tgt] of [['(+) → вход UBEC', RED, -1.5, UBEC_IN.V], ['(−) → вход UBEC', BLK, 1.5, UBEC_IN.G]])
+    makeWire(P + 'Y-разветвитель ' + nm, col, P14, [[YS.hi[0] + 1, -37 + dy, -17], [10, -38 + dy, -22], [50, -32 + dy, -24], [61 + dy, -10, -22], [61 + dy, 20, -20], [45, tgt[1], -17], tgt]);
+  // UBEC 5 В -> Pi (pin 2, 4 = 5V; pin 6 = GND), LCD
+  for (const [n, col, src, dy] of [[2, RED, UBEC_OUT.V, 0], [4, RED, UBEC_OUT.V, 1.2], [6, BLK, UBEC_OUT.G, 2.4]])
+    makeWire(`UBEC ${n === 6 ? 'GND' : '5V'} → Raspberry Pi pin ${n} (${n === 6 ? 'GND' : '5V'})`, col, 1.0, [src, [-45, 36 + dy, -14], [-53, 34, -6], [-53, 18 + dy, 8], [-42, 13 + dy, 15], up(piPin(n), 6), piPin(n)]);
+  for (const [nm, col, src, pin, dy] of [['5V → LCD VCC', RED, UBEC_OUT.V, LCD_PIN.VCC, 0], ['GND → LCD GND', BLK, UBEC_OUT.G, LCD_PIN.GND, 1.6]])
+    makeWire('UBEC ' + nm, col, 0.8, [src, [-50, 33 + dy, -16], [-60.5, 26 + dy, -16], [-60.5, 6 + dy, -13], [-75, 3 + dy, -12.5], [-110, 3 + dy, -12.5], [-121, 8 + dy, -10], [-130, 20, -6], pin]);
+  // I²C, логика 3.3 В: Pi -> PCA9685 -> MPU-6050; Pi -> LCD
+  makeWire('3.3 В: Raspberry Pi pin 1 → PCA9685 VCC (логика 3.3 В, не 5 В!)', ORG, 0.8, route(piPin(1), PCA_I2C.VCC, 12));
   makeWire('I²C SDA: Raspberry Pi pin 3 (GPIO2) → PCA9685 SDA', BLU, 0.8, route(piPin(3), PCA_I2C.SDA, 11));
   makeWire('I²C SCL: Raspberry Pi pin 5 (GPIO3) → PCA9685 SCL', YEL, 0.8, route(piPin(5), PCA_I2C.SCL, 12));
-  makeWire('I²C SDA (шина): Pi pin 3 → LCD SDA', BLU, 0.8, route(piPin(3), LCD_PIN.SDA, 18));
-  makeWire('I²C SCL (шина): Pi pin 5 → LCD SCL', YEL, 0.8, route(piPin(5), LCD_PIN.SCL, 20));
-  makeWire('Земля: Raspberry Pi pin 9 (GND) → LCD GND', BLK, 0.8, route(piPin(9), LCD_PIN.GND, 22));
-  makeWire('UBEC 5V → LCD VCC', RED, 0.8, route(UBEC_OUT.V, LCD_PIN.VCC, 26));
-  makeWire('Общая земля: Raspberry Pi pin 14 (GND) → PCA9685 GND', BLK, 0.8, route(piPin(14), PCA_I2C.GND, 13));
-  // 12 серв: каждый кабель из трёх жил (GND, V+, сигнал PWM) от канала PCA9685 к серво; обновляется при движении ног
+  makeWire('Земля: Raspberry Pi pin 9 → PCA9685 GND', BLK, 0.8, route(piPin(9), PCA_I2C.GND, 13));
+  makeWire('I²C SDA: PCA9685 (выход шины) → MPU-6050 SDA', BLU, 0.8, route(PCA_I2C2.SDA, MPU_PIN.SDA, 8));
+  makeWire('I²C SCL: PCA9685 (выход шины) → MPU-6050 SCL', YEL, 0.8, route(PCA_I2C2.SCL, MPU_PIN.SCL, 9));
+  makeWire('3.3 В: PCA9685 VCC (выход шины) → MPU-6050 VCC', ORG, 0.8, route(PCA_I2C2.VCC, MPU_PIN.VCC, 10));
+  makeWire('Земля: PCA9685 GND (выход шины) → MPU-6050 GND', BLK, 0.8, route(PCA_I2C2.GND, MPU_PIN.GND, 11));
+  for (const [nm, col, pin, lp, dy] of [['SDA', BLU, 3, LCD_PIN.SDA, 0], ['SCL', YEL, 5, LCD_PIN.SCL, 1.4]])
+    makeWire(`I²C ${nm}: Raspberry Pi pin ${pin} → LCD ${nm} (через Y-Dupont; нужен преобразователь уровней 3.3↔5 В)`, col, 0.8, [piPin(pin), up(piPin(pin), 5), [-49, 5 + dy, 12], [-60.5, -2 + dy, 4], [-60.5, -3 + dy, -12], [-75, -3 + dy, -12.5], [-110, -3 + dy, -12.5], [-121, 4 + dy, -10], [-131, 26, -4], lp]);
+  // опция: ADS1115 — шина с PCA9685, вход A0 с делителя от (+) после выключателя
+  for (const [nm, col, src, dst, dy] of [['SDA', BLU, PCA_I2C2.SDA, ADS_PIN.SDA, 0], ['SCL', YEL, PCA_I2C2.SCL, ADS_PIN.SCL, 1.2], ['3.3 В', ORG, PCA_I2C2.VCC, ADS_PIN.VDD, 2.4], ['GND', BLK, PCA_I2C2.GND, ADS_PIN.GND, 3.6]])
+    makeWire(`ADS1115 (опция) ${nm} ← PCA9685`, col, 0.6, [src, up(src, 3), [40, 46 - dy, 3], [52 + dy / 2, 20, 3], [52 + dy / 2, -30, 1], [50, -32 + dy, -14], [dst[0], dst[1] + 2, dst[2] - 2], dst], { opt: true });
+  makeWire('ADS1115 A0 ← делитель 20к/10к ← (+) после выключателя (опция)', WHT, 0.6, [ADS_PIN.A0, [ADS_PIN.A0[0], -35, -21], [0, -27, -22], [-40, -26.5, -22], [YS.lo[0] - 1, -33, -18]], { opt: true });
+  // пищалка: балансировочный разъём аккумулятора (3 жилы)
+  [[RED, -1], [BLU, 0], [BLK, 1]].forEach(([col, k]) => makeWire('Балансировочный провод LiPo (JST-XH 3 pin) → пищалка разряда', col, 0.5, [[BATT.lo[0], -15 + k, -13], [-60.5, -6 + k, -12], [-60.5, -4 + k, 6], [-50, 2 + k, 18], [-30, 8 + k, 20.5], [-26, 10 + k, 21]]));
+  // USB-динамик: кабель от штекера 90° через верх серво и проход в переборке
+  makeWire('USB-кабель динамика (≈20 см до морды, остаток свернуть)', GRY, 2.0, [[PI_USB.B[0] + 5.5, PI_USB.B[1], 25], [62, -6, 17], [90, 0, 15], [117, 10, 13], [124, 22, 6], [SPK.lo[0] - 0.5, 28, 0]]);
+  // шлейф камеры: вниз между рёбрами морды, назад по проходу под передними серво, вверх к CSI
+  const L = layout.camera, ax = new THREE.Vector3(...L.axis), vv = new THREE.Vector3(...L.up), o = new THREE.Vector3(...L.origin);
+  const conn = o.clone().addScaledVector(ax, -1.3).add(new THREE.Vector3(0, L.yc, 0)).addScaledVector(vv, -L.h / 2 - 0.5).toArray();
+  camRibbon = makeWire('Шлейф камеры 15-pin FFC (16 мм) → разъём CSI Raspberry Pi', WHT, 0.2, [conn, [conn[0] - 4, 0.5, -24], [125, 0.5, -24], [116, 0.5, -19], [100, 0, -17], [75, 0, -16], [61, 0, -12], [60, 0, 6], [58, -2, 27], [30, -24, 28], [PI_CSI[0], PI_CSI[1], 22], up(PI_CSI, 3), PI_CSI], { flat: 16 });
+  // 12 серв: жилы GND, V+, PWM от канала PCA9685; маршрут через щель у плеча, вдоль оси бедра, по бедру к колену
   const base = robot.links.base_link;
+  const local = (obj, p) => { const v = obj.localToWorld(new THREE.Vector3(...p.map(MM))); base.worldToLocal(v); return v.toArray().map(x => x * 1000); };
   for (const sv of servos) {
-    const anchor = () => { robot.updateMatrixWorld(true); const p = sv.g.localToWorld(new THREE.Vector3(-0.034, 0, -0.012)); base.worldToLocal(p); return [p.x * 1000, p.y * 1000, p.z * 1000]; };
-    [[0, BRN, 'GND', 0.0], [1, RED, 'V+', 1.2], [2, ORG, 'сигнал PWM', 2.4]].forEach(([row, col, nm, off]) => {
+    const exit = () => local(sv.g, [-31, 0, -33]);                       // вывод кабеля: торец корпуса у дна
+    const lg = robot.joints[`${sv.leg}_leg`];
+    sv.path = (row = 1) => {
+      const a = pcaCh(sv.ch, row), pts = [a, [a[0], a[1] - 4, a[2] + 8], [sv.fx * 58, sv.sy * 8, 6], [sv.fx * 70, sv.sy * 12, -4]];
+      if (sv.kind === 1) pts.push([sv.fx * 78, sv.sy * 22, -21]);
+      else pts.push([sv.fx * 90, sv.sy * 22, -27], [sv.fx * 93, sv.sy * 58, -27], local(lg, [-4, -sv.sy * 30, -20]));
+      if (sv.kind > 2) pts.push(local(lg, [-14, -sv.sy * 6, -55]), local(lg, [-14, -sv.sy * 6, -95]));
+      pts.push(exit()); return pts;
+    };
+    [[0, BRN, 'GND', -1.2], [1, RED, 'V+', 0], [2, ORG, 'сигнал PWM', 1.2]].forEach(([row, col, nm, off]) => {
       makeWire(`${sv.name}: жила ${nm} (канал ${sv.ch})`, col, 0.55, null, {
-        dyn: () => { const a = pcaCh(sv.ch, row), b = anchor(); b[1] += (off - 1.2); return [a, [a[0], a[1] - 4, a[2] + 6], [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, Math.max(a[2], b[2]) + 4], b]; }
+        cat: 'servowire', dyn: () => { const p = sv.path(row); const e = p[p.length - 1]; p[p.length - 1] = [e[0], e[1], e[2] + off]; return p; }
       });
     });
   }
   robot.updateMatrixWorld(true);
   wires.forEach(rebuildWire);
 }
+let camRibbon = null;
 let wireTick = 0;
 function updateWires() { if ((wireTick++ % 3) === 0) wires.forEach(w => { if (w.dyn) rebuildWire(w); }); }
 
+// ===== легенда =====
+const CAT = {
+  pi: 'Raspberry Pi 3B', sd: 'microSD 16–32 ГБ', pca: 'PCA9685', cap: 'Конденсатор 2200 мкФ 16 В', mpu: 'MPU-6050 (GY-521)', cam: 'Камера Pi v2', cammount: 'Кронштейн камеры (печать)',
+  lcd: 'LCD 16×2 I²C', batt: 'LiPo 2S 4000 мАч', xt60: 'XT60 + Y-разветвитель', fuse: 'Предохранитель 15 А', sw: 'Выключатель', ubec: 'UBEC 5V/5A', buzz: 'Пищалка разряда',
+  mic: 'USB-микрофон', spk: 'USB-динамик', ads: 'ADS1115 + делитель (опция)', servo: 'Серво PDI-HV5523MG ×12', wire: 'Провода', servowire: 'Кабели серв (+ удлинители)', logo: 'Логотип и надпись',
+};
 function buildLegend() {
-  const cat = m => {
-    const n = m.userData.name || '';
-    if (m.userData.wire) return 'Провода (наведи — название)';
-    if (n.startsWith('Серво')) return 'Серво PDI-HV5523MG ×12';
-    if (n.startsWith('LiPo')) return 'LiPo 2S 4000 мАч';
-    if (n.startsWith('UBEC')) return 'UBEC HKU5 5V/5A';
-    if (n.startsWith('LCD') || n.startsWith('I²C')) return 'LCD 16×2 I²C';
-    if (n.startsWith('PCA9685')) return 'PCA9685 (CAD Adafruit)';
-    if (n.startsWith('Raspberry')) return 'Raspberry Pi (CAD Pi 4B, плата как у 3B)';
-    return 'Логотип и надпись';
-  };
   const seen = new Map();
-  pick.forEach(m => { const k = cat(m); if (!seen.has(k)) seen.set(k, m.material?.color?.getHexString?.() || '888888'); });
-  document.getElementById('legend').innerHTML = [...seen].map(([n, c]) => `<label class="row"><span class="sw" style="background:#${c}"></span>${n}</label>`).join('');
+  pick.forEach(m => { const k = m.userData.cat; if (k && !seen.has(k)) seen.set(k, m.material?.color?.getHexString?.() || '888888'); });
+  document.getElementById('legend').innerHTML = Object.keys(CAT).filter(k => seen.has(k)).map(k => `<label class="row"><span class="sw" style="background:#${seen.get(k)}"></span>${CAT[k]}</label>`).join('');
+}
+
+// ===== проверка стыковки, длин кабелей, обзора камеры =====
+const SERVO_LEAD = 265, SLACK = 20, EXT = 300;     // провод серво 265 мм (по продавцу), запас на изгибы, удлинитель 30 см
+let report = null;
+function onPartsLoaded() { buildLegend(); setTimeout(runCheck, 50); }
+function runCheck() {
+  const t0 = performance.now(), base = robot.links.base_link;
+  const saved = Object.fromEntries(Object.entries(robot.joints).map(([n, j]) => [n, j.angle]));
+  applyJoints(POSES.stand); robot.updateMatrixWorld(true);
+  const baseInv = base.matrixWorld.clone().invert();
+  const tris = bodyTriangles(body, baseInv);
+  // 1) детали против корпуса и друг против друга
+  const items = solids.filter(m => !m.userData.nocheck && !m.userData.part?.startsWith('servo_') && !(m.userData.opt && !showOpt)).map(m => ({ m, o: obbOf(m, baseInv) }));
+  const parts = new Map();
+  const res = (m) => { const k = m.userData.part; if (!parts.has(k)) parts.set(k, { part: k, cat: m.userData.cat, name: m.userData.name.split(':')[0], body: [], near: [], notes: new Set(), with: new Set(), meshes: [] }); return parts.get(k); };
+  for (const { m, o } of items) {
+    const r = res(m); r.meshes.push(m);
+    if (obbVsBody(o, tris, 0)) r.body.push(m.userData.name); else if (!m.userData.mount && obbVsBody(o, tris, 0.5)) { r.near.push(m.userData.name); if (m.userData.note) r.notes.add(m.userData.note); }
+  }
+  for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) {
+    const A = items[i], B = items[j], pa = A.m.userData.part, pb = B.m.userData.part;
+    if (pa === pb || A.m.userData.touch?.includes(pb) || B.m.userData.touch?.includes(pa)) continue;
+    if (obbObb(A.o, B.o, 0.05)) { res(A.m).with.add(CAT[B.m.userData.cat] || pb); res(B.m).with.add(CAT[A.m.userData.cat] || pa); }
+  }
+  // серво против корпуса (по одному на кинематическое место)
+  const servoHits = [];
+  for (const sv of servos) { const ms = []; sv.g.traverse(o => o.isMesh && ms.push(o)); const hit = ms.some(m => !m.userData.horn && obbVsBody(obbOf(m, baseInv), tris, 0)); if (hit) servoHits.push(sv.name.split(' №')[0]); }
+  // 2) провода сквозь стенки корпуса
+  const wireHits = [];
+  for (const w of wires) if (w.check && !(w.mesh.userData.opt && !showOpt)) {
+    const P = wireCurve(w).getSpacedPoints(60).map(v => v.toArray().map(x => x * 1000));
+    for (let i = 1; i < P.length; i++) if (segVsBody(P[i - 1], P[i], tris)) { wireHits.push(`${w.name} (у точки ${P[i].map(Math.round).join(', ')} мм)`); break; }
+  }
+  // 3) длина кабелей серв во всех позах (стойка, сидя, присед, цикл шага вперёд и с поворотом)
+  const poses = [POSES.stand, POSES.sit];
+  for (const crouch of [0, 1]) for (const fast of [0, 1]) for (let k = 0; k < 8; k++) for (const turn of [0, 1]) poses.push(gaitPose(k / 8, turn ? 0 : 1, turn, fast, crouch));
+  const need = servos.map(() => 0);
+  for (const p of poses) { applyJoints(p); robot.updateMatrixWorld(true); servos.forEach((sv, i) => { need[i] = Math.max(need[i], new THREE.CatmullRomCurve3(sv.path(1).map(V3), false, 'catmullrom', 0.3).getLength() * 1000); }); }
+  applyJoints(saved); robot.updateMatrixWorld(true); wires.forEach(rebuildWire);
+  const cables = servos.map((sv, i) => ({ name: sv.name.split(' (')[0] + ' ' + ['плечо', 'бедро', 'колено'][sv.kind - 1], len: need[i], ext: need[i] + SLACK > SERVO_LEAD }));
+  // 4) обзор камеры: лучи по полю зрения против корпуса и ног
+  const fov = cameraView();
+  report = { parts: [...parts.values()], servoHits, wireHits, cables, ribbon: camRibbon.len, fov, ms: performance.now() - t0 };
+  window.spotReport = report; window.spot = { robot, servos, body, solids, wires, tris, camera, controls, rig };
+  renderReport(); renderElec();
+}
+function cameraView() {
+  if (!lensAt) return null;
+  const cam = fovLines.parent; cam.updateMatrixWorld(true);
+  const o = cam.localToWorld(V3(lensAt)), ray = new THREE.Raycaster(), N = [9, 7];
+  let blocked = 0, legs = 0, total = 0;
+  for (let i = 0; i < N[0]; i++) for (let j = 0; j < N[1]; j++) {
+    const h = -FOV_H + 2 * FOV_H * i / (N[0] - 1), v = -FOV_V + 2 * FOV_V * j / (N[1] - 1);
+    const p = cam.localToWorld(V3([lensAt[0] + 100, lensAt[1] + 100 * Math.tan(h), lensAt[2] + 100 * Math.tan(v)]));
+    ray.set(o, p.sub(o).normalize()); ray.far = 0.5; total++;
+    const hit = ray.intersectObjects(shell.filter(m => m.visible), false)[0];
+    if (hit) { blocked++; if (!['base_link', 'rear_link', 'front_link'].includes(linkOf(hit.object))) legs++; }
+  }
+  return { blocked, legs, total };
+}
+function renderReport() {
+  const r = report, ok = '<b style="color:#4ad07a">✓</b>', bad = '<b style="color:#ff6b6b">✗</b>', warn = '<b style="color:#f2c200">⚠</b>';
+  const bad1 = r.parts.filter(p => p.body.length || p.with.size), near = r.parts.filter(p => !p.body.length && !p.with.size && p.near.length);
+  const extN = r.cables.filter(c => c.ext).length;
+  const rows = [];
+  rows.push(`${bad1.length ? bad : ok} Детали внутри корпуса: ${r.parts.length - bad1.length} из ${r.parts.length} без пересечений`);
+  for (const p of bad1) rows.push(`&nbsp;&nbsp;${bad} <a href="#" data-hl="${p.part}">${CAT[p.cat] || p.name}</a>: ${p.body.length ? 'входит в корпус' : ''}${p.body.length && p.with.size ? '; ' : ''}${p.with.size ? 'задевает ' + [...p.with].join(', ') : ''}`);
+  for (const p of near) rows.push(`&nbsp;&nbsp;${warn} <a href="#" data-hl="${p.part}">${CAT[p.cat] || p.name}</a>: ${p.notes.size ? [...p.notes].join('; ') : 'зазор до корпуса < 0.5 мм'}`);
+  rows.push(`${r.servoHits.length ? warn : ok} Серво в гнёздах кронштейнов: ${r.servoHits.length ? 'касаются рамы — ' + r.servoHits.join(', ') : 'корпус серво не задевает раму (вал и качалка входят в переборку)'}`);
+  rows.push(`${r.wireHits.length ? bad : ok} Провода: ${r.wireHits.length ? r.wireHits.length + ' проходят сквозь стенку' : 'ни один не проходит сквозь стенки'}`);
+  for (const w of r.wireHits) rows.push(`&nbsp;&nbsp;${bad} ${w}`);
+  rows.push(`${r.ribbon <= 200 ? ok : r.ribbon <= 300 ? warn : bad} Шлейф камеры: нужно ≈${Math.round(r.ribbon)} мм → ${r.ribbon <= 200 ? 'хватит 20 см' : r.ribbon <= 300 ? 'брать 30 см (20 см мало)' : 'не хватит даже 30 см'}`);
+  rows.push(`${extN ? warn : ok} Кабели серв (свой провод ${SERVO_LEAD} мм, запас ${SLACK} мм): удлинитель нужен на ${extN} из 12`);
+  rows.push('<table class="cab">' + r.cables.map(c => `<tr><td>${c.name}</td><td>${Math.round(c.len)} мм</td><td>${c.ext ? (c.len + SLACK <= SERVO_LEAD + EXT ? 'удлинитель' : bad + ' мало 30 см') : 'хватает'}</td></tr>`).join('') + '</table>');
+  if (r.fov) rows.push(`${r.fov.blocked - r.fov.legs ? warn : ok} Обзор камеры: корпус закрывает ${r.fov.blocked - r.fov.legs} из ${r.fov.total} лучей${r.fov.legs ? `, ноги — ${r.fov.legs}` : ''} (включи «Поле зрения камеры»)`);
+  rows.push(`<span style="color:var(--mut)">проверено за ${Math.round(r.ms)} мс; ${showOpt ? 'с опцией ADS1115' : 'без опций'}</span>`);
+  const el = document.getElementById('report'); el.innerHTML = rows.join('<br>');
+  el.querySelectorAll('[data-hl]').forEach(a => a.onclick = e => { e.preventDefault(); highlight(a.dataset.hl); });
+}
+// ---- электрика: расчёт по паспортным данным деталей из списка ----
+const E = {
+  vFull: 8.4, vNom: 7.4, vCut: 6.4, servoV: [6.0, 8.4], fuse: 15, sw: 16, capV: 16, ubecA: 5, mah: 4000,
+  load5: [['Raspberry Pi 3B (пик)', 1.3], ['камера v2', 0.25], ['USB-динамик', 0.5], ['USB-микрофон', 0.1], ['LCD с подсветкой', 0.08], ['логика PCA9685, MPU-6050, ADS1115', 0.02]],
+  servoWalk: [3, 6], servoStand: 1.5, balanceLead: 100,
+};
+function renderElec() {
+  const ok = '<b style="color:#4ad07a">✓</b>', bad = '<b style="color:#ff6b6b">✗</b>', warn = '<b style="color:#f2c200">⚠</b>';
+  const i5 = E.load5.reduce((s, [, a]) => s + a, 0), iB5 = i5 * 5 / (E.vNom * 0.9);
+  const run = (a) => E.mah / 1000 * 0.8 / a * 60;
+  const par = (pairs) => { let g = 0, gv = 0; for (const [v, r] of pairs) { g += 1 / r; gv += v / r; } return gv / g; };
+  const vLcd = par([[3.3, 1.8], [5, 4.7]]);
+  const bal = wires.find(w => w.name.startsWith('Балансировочный'))?.len ?? 0;
+  const rows = [
+    `${ok} <b>Серво от 2S напрямую:</b> ${E.vCut}–${E.vFull} В при допуске PDI-HV5523MG ${E.servoV[0]}–${E.servoV[1]} В. Полностью заряженный аккумулятор — ровно на верхней границе; LiHV (4.35 В/банка) не использовать.`,
+    `${ok} <b>Предохранитель ${E.fuse} А и выключатель ${E.sw} А:</b> предохранитель сгорит раньше, чем перегреется выключатель. С предохранителем 20 А нужен выключатель ≥ 20 А, а такой в штатное отверстие 19×13 мм не встаёт.`,
+    `${ok} <b>Конденсатор ${E.capV} В</b> на шине ${E.vFull} В — запас ×${(E.capV / E.vFull).toFixed(1)}. Соблюдать полярность.`,
+    `${ok} <b>UBEC ${E.ubecA} А:</b> нагрузка 5 В ≈ ${i5.toFixed(2)} А (${Math.round(i5 / E.ubecA * 100)} %): ${E.load5.map(([n, a]) => `${n} ${a} А`).join(', ')}. Pi питать через pin 2 и 4 (две жилы), UBEC 5.0–5.2 В.`,
+    `${ok} <b>I²C-адреса:</b> PCA9685 0x40 (и 0x70 all-call), LCD 0x27, MPU-6050 0x68, ADS1115 0x48 — конфликтов нет.`,
+    `${ok} <b>Логика PCA9685 от 3.3 В</b> (pin 1 Pi): её подтяжки 10 кОм тянут шину к 3.3 В. Если запитать VCC от 5 В, шина поднимется выше 3.3 В.`,
+    `${bad} <b>LCD-переходник PCF8574 на 5 В:</b> его подтяжки 4.7 кОм к 5 В вместе с подтяжками Pi 1.8 кОм к 3.3 В дают на SDA/SCL ≈ ${vLcd.toFixed(2)} В — больше допустимых 3.6 В для GPIO Pi. Нужен двунаправленный преобразователь уровней I²C (BSS138, 4 канала) — в списке его нет; либо выпаять 2 подтяжки на переходнике (тогда работа LCD не гарантирована: PCF8574 на 5 В ждёт «1» от 3.5 В).`,
+    `${bad} <b>Делитель для ADS1115 10к+10к:</b> даёт до ${(E.vFull / 2).toFixed(1)} В, а на вход ADS1115 при питании 3.3 В можно не больше 3.6 В. Ставить 20 кОм + 10 кОм (до ${(E.vFull / 3).toFixed(1)} В), усиление ±4.096 В.`,
+    `${warn} <b>Ток серв через PCA9685:</b> весь ток 12 серв идёт через клеммник и дорожки платы (при ходьбе ≈ ${E.servoWalk.join('–')} А, на рывках больше). Дорожки V+/GND пропаять медным проводом или подать питание на гребёнки серв отдельной шиной.`,
+    `${warn} <b>Время работы:</b> ${E.mah} мА·ч, 80 % ёмкости: ходьба ≈ ${Math.round(run(E.servoWalk[1] + iB5))}–${Math.round(run(E.servoWalk[0] + iB5))} мин, стоя ≈ ${Math.round(run(E.servoStand + iB5))} мин. Ток серв — оценка, паспортного тока у PDI-HV5523MG нет.`,
+    `${bal > E.balanceLead ? warn : ok} <b>Балансировочный провод до пищалки:</b> по трассе ≈ ${Math.round(bal)} мм, у аккумулятора обычно ~${E.balanceLead} мм — ${bal > E.balanceLead ? 'нужен удлинитель JST-XH 3 pin' : 'хватает'}.`,
+  ];
+  document.getElementById('elec').innerHTML = rows.join('<br>');
+}
+let hl = null;
+function highlight(part) {
+  for (const m of pick) if (m.material?.emissive) m.material.emissive.setHex(m.userData.part === part && hl !== part ? 0xff2020 : 0x000000);
+  hl = hl === part ? null : part;
 }
 
 // ---- суставы / позы ----
 const NAMES = ['front_left', 'front_right', 'rear_left', 'rear_right'];
 const KIND = { shoulder: 'плечо', leg: 'бедро', foot: 'колено' };
-const POSES = {
-  stand: {}, sit: {},
-};
+const POSES = { stand: {}, sit: {} };
 function setStand(shoulder, leg, foot) { return Object.fromEntries(NAMES.flatMap(n => [[n + '_shoulder', shoulder], [n + '_leg', leg], [n + '_foot', foot]])); }
 POSES.stand = setStand(0, 0.75, -1.5);
 POSES.sit = { ...setStand(0, 0.2, -0.4), rear_left_leg: 1.1, rear_right_leg: 1.1, rear_left_foot: -2.1, rear_right_foot: -2.1 };
 function applyPose(p) { for (const [j, v] of Object.entries(p)) setJ(j, v); settle(); }
+function applyJoints(p) { for (const [j, v] of Object.entries(p)) robot.joints[j]?.setJointValue(v); }
 function setJ(name, v) {
   const j = robot.joints[name]; if (!j) return;
   j.setJointValue(v);
@@ -346,6 +597,23 @@ const keys = new Set();
 addEventListener('keydown', e => { if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyC', 'Space', 'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) { keys.add(e.code); if (!e.ctrlKey && !e.metaKey) e.preventDefault(); } });
 addEventListener('blur', () => keys.clear());
 addEventListener('keyup', e => keys.delete(e.code));
+// углы суставов в фазе шага: fwd -1/0/1, turn -1/0/1, fast 0/1, cr — присед 0…1, a — амплитуда
+function gaitPose(ph0, fwd, turn, fast, cr, a = 1) {
+  const S = fast ? 0.085 : 0.065, H = 0.035;
+  const dir = fwd !== 0 ? fwd : 1, stride = fwd !== 0 ? S : S * 0.45;
+  const zNow = Z0 + cr * (ZS - Z0), out = {};
+  NAMES.forEach(n => {
+    const left = n.endsWith('left');
+    const diag = (n === 'front_left' || n === 'rear_right') ? 0 : 0.5;
+    let ph = (ph0 + diag) % 1, x, z;
+    const st = stride * a * (fwd !== 0 ? 1 : (left ? -turn : turn)) * dir;
+    if (ph < 0.5) { const p = ph / 0.5; x = X0 + st * (0.5 - p); z = zNow; }
+    else { const p = (ph - 0.5) / 0.5; x = X0 + st * (-0.5 + p); z = zNow + H * a * Math.sin(Math.PI * p); }
+    const [a1, a2] = ik(x, z);
+    out[n + '_shoulder'] = 0; out[n + '_leg'] = a1; out[n + '_foot'] = a2;
+  });
+  return out;
+}
 function gaitStep(dt) {
   const fwd = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
   const turn = (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0) - (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0);
@@ -354,21 +622,9 @@ function gaitStep(dt) {
   crouch += ((sit ? 1 : 0) - crouch) * Math.min(1, dt * 7);                 // присед на Ctrl / C
   const want = ((fwd !== 0 || turn !== 0) && crouch < 0.25) ? 1 : 0;
   amp += (want - amp) * Math.min(1, dt * 6);                                // плавный старт и остановка
-  const T = fast ? 0.42 : 0.55, S = fast ? 0.085 : 0.065, H = 0.035;        // период, длина шага, подъём ноги
+  const T = fast ? 0.42 : 0.55, S = fast ? 0.085 : 0.065;                   // период, длина шага
   if (amp > 0.02) phase = (phase + dt / T) % 1;
-  const dir = fwd !== 0 ? fwd : 1, stride = fwd !== 0 ? S : S * 0.45;
-  const zNow = Z0 + crouch * (ZS - Z0);
-  NAMES.forEach(n => {
-    const left = n.endsWith('left');
-    const diag = (n === 'front_left' || n === 'rear_right') ? 0 : 0.5;
-    let ph = (phase + diag) % 1, x, z;
-    const sgn = fwd !== 0 ? 1 : (left ? -turn : turn);
-    const st = stride * amp * sgn * dir;
-    if (ph < 0.5) { const p = ph / 0.5; x = X0 + st * (0.5 - p); z = zNow; }
-    else { const p = (ph - 0.5) / 0.5; x = X0 + st * (-0.5 + p); z = zNow + H * amp * Math.sin(Math.PI * p); }
-    const [a1, a2] = ik(x, z);
-    setJ(n + '_shoulder', 0); setJ(n + '_leg', a1); setJ(n + '_foot', a2);
-  });
+  for (const [j, v] of Object.entries(gaitPose(phase, fwd, turn, fast, crouch, amp))) setJ(j, v);
   const v = (S / (T * 0.5)) * amp * fwd;
   rig.rotation.y += turn * (fast ? 1.6 : 1.1) * amp * dt;
   const hx = Math.cos(rig.rotation.y), hz = -Math.sin(rig.rotation.y);
@@ -387,11 +643,16 @@ btn('bStand').onclick = () => { stopAnim(); setBtn('bStand'); applyPose(POSES.st
 btn('bSit').onclick = () => { stopAnim(); setBtn('bSit'); applyPose(POSES.sit); };
 btn('bWalk').onclick = () => { if (mode !== 'walk') { applyPose(POSES.stand); groundY = rig.position.y; } mode = 'walk'; amp = 0; crouch = 0; phase = 0; last = performance.now(); setBtn('bWalk'); hud.style.display = 'block'; };
 let spin = false; btn('bSpin').onclick = e => { spin = !spin; controls.autoRotate = spin; controls.autoRotateSpeed = 3; e.target.classList.toggle('on', spin); };
+btn('bCheck').onclick = () => { if (robot && !pending) runCheck(); };
 
 // ---- слои ----
+let showOpt = true;
+const optVisible = m => !m.userData.opt || showOpt;
 btn('cShell').onchange = e => shell.forEach(m => m.visible = e.target.checked);
 btn('sGhost').oninput = e => { const v = +e.target.value / 100; btn('vGhost').textContent = Math.round(v * 100) + '%'; shell.forEach(m => { m.material.transparent = v > 0.01; m.material.opacity = 1 - v * 0.92; m.material.depthWrite = v < 0.35; m.material.needsUpdate = true; }); };
-btn('cElec').onchange = e => pick.forEach(m => m.visible = e.target.checked);
+btn('cElec').onchange = e => pick.forEach(m => { if (m.userData.cat !== 'logo') m.visible = e.target.checked && optVisible(m); });
+btn('cOpt').onchange = e => { showOpt = e.target.checked; pick.forEach(m => { if (m.userData.opt) m.visible = showOpt && btn('cElec').checked; }); if (report) runCheck(); };
+btn('cFov').onchange = e => { if (fovLines) fovLines.visible = e.target.checked; };
 btn('cLogo').onchange = e => { if (logoGroup) logoGroup.visible = e.target.checked; };
 btn('cLidar').onchange = e => robot.links.lidar_link.traverse(m => { if (m.isMesh) m.visible = e.target.checked; });
 btn('cGrid').onchange = e => grid.visible = e.target.checked;
@@ -411,6 +672,7 @@ function applyQuery() {
   if (q.get('nologo') && logoGroup) logoGroup.visible = false;
   if (q.get('ghost')) { btn('sGhost').value = 75; btn('sGhost').oninput({ target: btn('sGhost') }); }
   if (q.get('noshell')) { btn('cShell').checked = false; btn('cShell').onchange({ target: btn('cShell') }); }
+  if (q.get('fov')) { btn('cFov').checked = true; btn('cFov').onchange({ target: btn('cFov') }); }
   const c = q.get('cam'), y = rig.position.y + 0.06, d = +(q.get('d') || 0.55);
   if (c === 'top') camera.position.set(0.001, d + .3, 0.001);
   if (c === 'side') camera.position.set(0, y, d);
@@ -422,11 +684,11 @@ function applyQuery() {
   if (q.get('tz')) { const tz = +q.get('tz') / 1000, ty = +(q.get('ty') || 0) / 1000, tx = +(q.get('tx') || 0) / 1000; camera.position.set(tx - d, rig.position.y + tz, ty + 0.0001); controls.target.set(tx, rig.position.y + tz, ty); }
   else controls.target.set(0, y, 0);
 }
-function fit() { controls.target.set(0, 0.13, 0); return;  controls.target.set(0, rig.position.y + 0.02, 0); }
+function fit() { controls.target.set(0, 0.13, 0); }
 
-let _w=0,_h=0;
+let _w = 0, _h = 0;
 renderer.setAnimationLoop(() => {
-  if (view.clientWidth !== _w || view.clientHeight !== _h) { _w = view.clientWidth; _h = view.clientHeight; resize();  }
+  if (view.clientWidth !== _w || view.clientHeight !== _h) { _w = view.clientWidth; _h = view.clientHeight; resize(); }
   if (robot && mode === 'walk') { const now = performance.now(); gaitStep(Math.min(0.05, (now - last) / 1000)); last = now; }
   if (robot && wires.length) updateWires();
   controls.update(); renderer.render(scene, camera);
