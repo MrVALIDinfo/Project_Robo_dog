@@ -10,6 +10,8 @@
   python tools/kdy/fit_kdy.py fit <папка с распакованными zip>     -> tools/kdy/fit.json
 Посадка серво по гнёздам деталей _cls (серво в URDF стоят неточно и сами входят в пластик на 12–37 %):
   g++ -O2 -o tools/kdy/inside tools/kdy/inside.cpp && python tools/kdy/fit_kdy.py seats   -> уточнённые гнёзда в tools/kdy/fit.json
+Паз под вывод кабеля бедренного серво (торец серво стоит к стенке бедра вплотную, зазор 0–0.45 мм, кабель ~1.2 мм):
+  python tools/kdy/fit_kdy.py groove                                -> print/kdy/L_arm_cls_cable.stl, R_arm_cls_cable.stl
 Сборка STL для 3D-модели из print/kdy и fit.json (zip не нужны):
   python tools/kdy/fit_kdy.py build                                 -> 3d-viewer/stl/kdy/*.stl, 3d-viewer/parts/servo_seats.json
 pip install numpy trimesh scipy rtree
@@ -182,6 +184,24 @@ def seats():
     json.dump(F, open(FIT, 'w'), indent=1, ensure_ascii=False)
 
 
+# паз в системе серво: от вывода кабеля (торец, у дна) вбок к щели у крышки бедра; глубина 2 мм в стенку
+GROOVE = ([-32.4, -2.5, -35.8], [-30.2, 13.0, -30.2])
+
+
+def groove():
+    F = json.load(open(FIT)); P = load_dir(PRINT)
+    for rv, src, sy in (('larm', 'L_arm_cls', 1), ('rarm', 'R_arm_cls', -1)):
+        r = next(r for r in F['parts'][rv] if r['part'] in (src, src + '_cable'))
+        s = F['servos'][rv][0]; X, Z = np.array(s['x']), np.array(s['z']); Ms = np.eye(4); Ms[:3, :3] = np.c_[X, np.cross(Z, X), Z]; Ms[:3, 3] = s['o']
+        lo, hi = np.array(GROOVE[0]), np.array(GROOVE[1])
+        if sy < 0: lo[1], hi[1] = -hi[1], -lo[1]
+        box = trimesh.creation.box(bounds=[lo, hi]); box.apply_transform(np.linalg.inv(np.array(r['M'])) @ Ms)   # система серво -> файл детали
+        part = trimesh.load(P[src]); out = trimesh.boolean.difference([part, box], engine='manifold')
+        out.export(os.path.join(PRINT, src + '_cable.stl')); r['part'] = src + '_cable'
+        print(f'{src}_cable.stl: убрано {part.volume - out.volume:.0f} мм³, watertight={out.is_watertight}')
+    json.dump(F, open(FIT, 'w'), indent=1, ensure_ascii=False)
+
+
 def build():
     F = json.load(open(FIT)); P = load_dir(PRINT)
     os.makedirs(os.path.join(V, 'stl', 'kdy'), exist_ok=True)
@@ -197,4 +217,5 @@ def build():
 if __name__ == '__main__':
     if sys.argv[1] == 'fit': fit(sys.argv[2])
     elif sys.argv[1] == 'seats': seats()
+    elif sys.argv[1] == 'groove': groove()
     else: build()

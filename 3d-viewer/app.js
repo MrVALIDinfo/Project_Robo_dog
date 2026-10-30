@@ -30,9 +30,10 @@ addEventListener('resize', resize); resize();
 const manager = new THREE.LoadingManager();
 const loader = new URDFLoader(manager);
 const rig = new THREE.Group(); scene.add(rig);
-let robot, shell = [], body = [], layout = null, seats = null;
+let robot, shell = [], body = [], layout = null, seats = null, routes = null;
 const layoutReady = Promise.all([fetch('parts/layout.json').then(r => r.json()).then(j => layout = j),
-  fetch('parts/servo_seats.json').then(r => r.json()).then(j => seats = j)]);
+  fetch('parts/servo_seats.json').then(r => r.json()).then(j => seats = j),
+  fetch('parts/cable_routes.json').then(r => r.json()).then(j => routes = j)]);
 
 loader.load('spot_micro.urdf', r => {
   robot = r;
@@ -331,7 +332,8 @@ function makeWire(name, color, r, pts, extra = {}) {
   rebuildWire(w);
   return w;
 }
-function wireCurve(w) { return new THREE.CatmullRomCurve3((w.dyn ? w.dyn() : w.pts).map(V3), false, 'catmullrom', 0.3); }
+function wireCurve(w) { return w.dyn ? servoCurve(w.dyn()) : new THREE.CatmullRomCurve3(w.pts.map(V3), false, 'catmullrom', 0.3); }
+const servoCurve = (pts) => new THREE.CatmullRomCurve3(pts.map(V3), false, 'centripetal');   // кабели серв: без выгибов на углах трассы
 function rebuildWire(w) {
   const curve = wireCurve(w), n = Math.max(10, curve.points.length * 6);
   w.len = curve.getLength() * 1000;
@@ -400,18 +402,29 @@ function buildWiring() {
   const L = layout.camera, ax = new THREE.Vector3(...L.axis), vv = new THREE.Vector3(...L.up), o = new THREE.Vector3(...L.origin);
   const conn = o.clone().addScaledVector(ax, -1.3).add(new THREE.Vector3(0, L.yc, 0)).addScaledVector(vv, -L.h / 2 - 0.5).toArray();
   camRibbon = makeWire('Шлейф камеры 15-pin FFC (16 мм) → разъём CSI Raspberry Pi', WHT, 0.2, [conn, [conn[0] - 4, 0.5, -24], [125, 0.5, -24], [116, 0.5, -19], [100, 0, -17], [75, 0, -16], [61, 0, -12], [60, 0, 6], [58, -2, 27], [30, -24, 28], [PI_CSI[0], PI_CSI[1], 22], up(PI_CSI, 3), PI_CSI], { flat: 16 });
-  // 12 серв: жилы GND, V+, PWM от канала PCA9685; маршрут через щель у плеча, вдоль оси бедра, по бедру к колену
+  // 12 серв: жилы GND, V+, PWM от канала PCA9685. Трассы — parts/cable_routes.json (tools/kdy/cable_routes.py: поиск пути
+  // по сетке 2 мм с зазором 2 мм от пластика, отдельно для левой и правой стороны — детали R_ не зеркальны L_ точно):
+  //   бедро — из торца серво вбок в щель у крышки бедра и по ноге к верху бедра;
+  //   колено — из голени через ось колена с внешней стороны (кабель не двигается при сгибании), вверх по передней кромке бедра;
+  //   дальше над кронштейном плеча в щель между переборкой I_shoulder и кронштейном (|x| ≈ 72 мм) и внутрь корпуса;
+  //   плечо — под кронштейном плеча в ту же щель и через центральный проход (|y| < 20 мм).
+  // Точки на ноге двигаются вместе с её звеньями; точки трассы корпуса с |x| ≥ 75 мм крепятся к кронштейну плеча.
   const base = robot.links.base_link;
   const local = (obj, p) => { const v = obj.localToWorld(new THREE.Vector3(...p.map(MM))); base.worldToLocal(v); return v.toArray().map(x => x * 1000); };
   for (const sv of servos) {
-    const exit = () => local(sv.g, [-31, 0, -33]);                       // вывод кабеля: торец корпуса у дна
-    const lg = robot.joints[`${sv.leg}_leg`];
+    const S = robot.links[`${sv.leg}_shoulder_link`], L = robot.links[`${sv.leg}_leg_link`], F = robot.links[`${sv.leg}_foot_link`];
+    const R = routes[sv.sy > 0 ? 'l' : 'r'], k = sv.fx > 0 ? 'front' : 'rear', sy = sv.sy;
+    const G = (x, y, z) => local(sv.g, [x, y, z]);                                  // система серво
+    const onBody = (p) => Math.abs(p[0]) >= 75 ? local(S, [p[0] - sv.fx * 93, p[1] - sy * 39, p[2]]) : p;   // в кронштейн плеча или в корпус
     sv.path = (row = 1) => {
-      const a = pcaCh(sv.ch, row), pts = [a, [a[0], a[1] - 4, a[2] + 8], [sv.fx * 58, sv.sy * 8, 6], [sv.fx * 70, sv.sy * 12, -4]];
-      if (sv.kind === 1) pts.push([sv.fx * 78, sv.sy * 22, -21]);
-      else pts.push([sv.fx * 90, sv.sy * 22, -27], [sv.fx * 93, sv.sy * 58, -27], local(lg, [-4, -sv.sy * 30, -20]));
-      if (sv.kind > 2) pts.push(local(lg, [-14, -sv.sy * 6, -55]), local(lg, [-14, -sv.sy * 6, -95]));
-      pts.push(exit()); return pts;
+      const a = pcaCh(sv.ch, row), pts = [a, [a[0], a[1] - 4, a[2] + 8]];
+      if (sv.kind === 1) pts.push(...[...R[`${k}_shoulder`]].reverse().map(onBody));
+      else {
+        pts.push(...[...R[`${k}_leg`]].reverse().slice(0, -1).map(onBody));
+        if (sv.kind === 2) pts.push(...[...R.hip].reverse().map(p => local(L, p)), G(-33, sy * 11.5, -4), G(-33, sy * 11.5, -30), G(-31.4, sy * 11.5, -33), G(-31.4, sy * 5, -33));   // паз 2 мм в стенке бедра (print/kdy/*_arm_cls_cable.stl)
+        else pts.push(...[...R.knee_up].reverse().map(p => local(L, p)), local(L, [14, sy * 32, -82]), local(L, [2, sy * 32, -98]), local(L, [0, sy * 30, -107.5]), local(F, [0, sy * 30, -16]), ...[...R.knee_down].reverse().map(p => local(F, p)));
+      }
+      pts.push(local(sv.g, [-31, 0, -33])); return pts;                     // вывод кабеля: торец корпуса у дна
     };
     [[0, BRN, 'GND', -1.2], [1, RED, 'V+', 0], [2, ORG, 'сигнал PWM', 1.2]].forEach(([row, col, nm, off]) => {
       makeWire(`${sv.name}: жила ${nm} (канал ${sv.ch})`, col, 0.55, null, {
@@ -486,12 +499,28 @@ function runCheck() {
   const poses = [POSES.stand, POSES.sit];
   for (const crouch of [0, 1]) for (const fast of [0, 1]) for (let k = 0; k < 8; k++) for (const turn of [0, 1]) poses.push(gaitPose(k / 8, turn ? 0 : 1, turn, fast, crouch));
   const need = servos.map(() => 0);
-  for (const p of poses) { applyJoints(p); robot.updateMatrixWorld(true); servos.forEach((sv, i) => { need[i] = Math.max(need[i], new THREE.CatmullRomCurve3(sv.path(1).map(V3), false, 'catmullrom', 0.3).getLength() * 1000); }); }
+  for (const p of poses) { applyJoints(p); robot.updateMatrixWorld(true); servos.forEach((sv, i) => { need[i] = Math.max(need[i], servoCurve(sv.path(1)).getLength() * 1000); }); }
+  // кабели серв сквозь раму и детали ног: стойка, сидя, присед и 4 фазы шага
+  const cableHits = new Map(), PN = ['стойка', 'сидя', 'присед'];
+  [POSES.stand, POSES.sit, gaitPose(0, 1, 0, 0, 1), ...[0, 2, 4, 6].map(k => gaitPose(k / 8, 1, 0, 1, 0))].forEach((p, pi) => {
+    applyJoints(p); robot.updateMatrixWorld(true);
+    const inv = base.matrixWorld.clone().invert(), T = {};
+    for (const sv of servos) {
+      const P = servoCurve(sv.path(1)).getSpacedPoints(48).map(v => v.toArray().map(x => x * 1000));
+      for (const l of ['base_link', 'front_link', 'rear_link', ...['shoulder_link', 'leg_link', 'leg_link_cover', 'foot_link'].map(k => `${sv.leg}_${k}`)]) {
+        T[l] ??= bodyTriangles(shell.filter(m => linkOf(m) === l), inv);
+        for (let i = 1; i < P.length; i++) if (segVsBody(P[i - 1], P[i], T[l])) {
+          const k = `${sv.name.split(' №')[0]} — ${PARTN[l.replace(/^(front|rear)_(left|right)_/, '')] || l}`;
+          if (!cableHits.has(k)) cableHits.set(k, `${PN[pi] ?? 'шаг'}, у точки ${P[i].map(Math.round).join(', ')}`); break;
+        }
+      }
+    }
+  });
   applyJoints(saved); robot.updateMatrixWorld(true); wires.forEach(rebuildWire);
   const cables = servos.map((sv, i) => ({ name: sv.name.split(' (')[0] + ' ' + ['плечо', 'бедро', 'колено'][sv.kind - 1], len: need[i], ext: need[i] + SLACK > SERVO_LEAD }));
   // 4) обзор камеры: лучи по полю зрения против корпуса и ног
   const fov = cameraView();
-  report = { parts: [...parts.values()], servoHits, wireHits, cables, ribbon: camRibbon.len, fov, ms: performance.now() - t0 };
+  report = { parts: [...parts.values()], servoHits, wireHits, cableHits: [...cableHits].map(([k, v]) => `${k} (${v})`), cables, ribbon: camRibbon.len, fov, ms: performance.now() - t0 };
   window.spotReport = report; window.spot = { robot, servos, body, solids, wires, tris, camera, controls, rig };
   renderReport(); renderElec();
 }
@@ -521,6 +550,8 @@ function renderReport() {
   for (const h of r.servoHits) rows.push(`&nbsp;&nbsp;${bad} ${h}`);
   rows.push(`${r.wireHits.length ? bad : ok} Провода: ${r.wireHits.length ? r.wireHits.length + ' проходят сквозь стенку' : 'ни один не проходит сквозь стенки'}`);
   for (const w of r.wireHits) rows.push(`&nbsp;&nbsp;${bad} ${w}`);
+  rows.push(`${r.cableHits.length ? bad : ok} Кабели серв (7 поз, включая шаг и присед): ${r.cableHits.length ? r.cableHits.length + ' проходят сквозь детали' : 'не проходят ни сквозь раму, ни сквозь детали ног'}`);
+  for (const w of r.cableHits) rows.push(`&nbsp;&nbsp;${bad} ${w}`);
   rows.push(`${r.ribbon <= 200 ? ok : r.ribbon <= 300 ? warn : bad} Шлейф камеры: нужно ≈${Math.round(r.ribbon)} мм → ${r.ribbon <= 200 ? 'хватит 20 см' : r.ribbon <= 300 ? 'брать 30 см (20 см мало)' : 'не хватит даже 30 см'}`);
   rows.push(`${extN ? warn : ok} Кабели серв (свой провод ${SERVO_LEAD} мм, запас ${SLACK} мм): удлинитель нужен на ${extN} из 12`);
   rows.push('<table class="cab">' + r.cables.map(c => `<tr><td>${c.name}</td><td>${Math.round(c.len)} мм</td><td>${c.ext ? (c.len + SLACK <= SERVO_LEAD + EXT ? 'удлинитель' : bad + ' мало 30 см') : 'хватает'}</td></tr>`).join('') + '</table>');

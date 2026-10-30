@@ -3,7 +3,7 @@
   "larm": [
    {
     "ref": "L_arm_mg",
-    "part": "L_arm_cls",
+    "part": "L_arm_cls_cable",
     "M": [
      [
       1.0,
@@ -37,7 +37,7 @@
   "rarm": [
    {
     "ref": "R_arm_mg",
-    "part": "R_arm_cls",
+    "part": "R_arm_cls_cable",
     "M": [
      [
       0.999985,
