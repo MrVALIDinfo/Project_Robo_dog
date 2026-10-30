@@ -8,6 +8,8 @@
 
 Шаг 1–3 нужен один раз, нужны распакованные zip с Thingiverse:
   python tools/kdy/fit_kdy.py fit <папка с распакованными zip>     -> tools/kdy/fit.json
+Посадка серво по гнёздам деталей _cls (серво в URDF стоят неточно и сами входят в пластик на 12–37 %):
+  g++ -O2 -o tools/kdy/inside tools/kdy/inside.cpp && python tools/kdy/fit_kdy.py seats   -> уточнённые гнёзда в tools/kdy/fit.json
 Сборка STL для 3D-модели из print/kdy и fit.json (zip не нужны):
   python tools/kdy/fit_kdy.py build                                 -> 3d-viewer/stl/kdy/*.stl, 3d-viewer/parts/servo_seats.json
 pip install numpy trimesh scipy rtree
@@ -119,6 +121,67 @@ def fit(things):
     json.dump(out, open(FIT, 'w'), indent=1, ensure_ascii=False)
 
 
+# PDI-HV5523MG в системе гнезда: вал на верхе корпуса (0,0,0), вал +Z, корпус в сторону -X (как makeServo в app.js)
+CASE = ([-30.4, -10.1, -38.0], [10.1, 10.1, 0.0])
+SEAT_PART = {'larm': 'L_arm_cls', 'rarm': 'R_arm_cls', 'lfoot': 'L_wrist_cls', 'rfoot': 'R_wrist_cls', 'lshoulder': 'L_arm_joint_cls', 'rshoulder': 'R_arm_joint_cls'}
+
+
+INSIDE = os.path.join(os.path.dirname(__file__), 'inside')     # g++ -O2 -o tools/kdy/inside tools/kdy/inside.cpp
+
+
+def inside(stl, M, P):
+    """точки P (в системе, куда M переводит деталь) внутри детали stl — через C++-модуль inside"""
+    import subprocess
+    inp = stl + '\n' + ' '.join(f'{x:.9g}' for x in np.asarray(M).ravel()) + f'\n{len(P)}\n' + '\n'.join(f'{a:.3f} {b:.3f} {c:.3f}' for a, b, c in P)
+    out = subprocess.run([INSIDE], input=inp, capture_output=True, text=True, check=True).stdout.strip()
+    return np.frombuffer(out.encode(), dtype=np.uint8) == ord('1')
+
+
+def skin(step=0.5, depth=2.0):
+    """точки корпуса серво в слое depth мм у граней — пересечения с гнездом неглубокие"""
+    lo, hi = np.array(CASE[0]), np.array(CASE[1])
+    g = np.stack(np.meshgrid(*[np.arange(lo[k] + step / 2, hi[k], step) for k in range(3)], indexing='ij'), -1).reshape(-1, 3)
+    return g[np.minimum(g - lo, hi - g).min(1) < depth]
+
+
+def pose(seat, d):
+    """гнездо + малая поправка d = (поворот вокруг вала °, сдвиг x, y, z мм в системе гнезда) -> матрица серво -> деталь"""
+    Z, X0 = np.array(seat['z']), np.array(seat['x']); Y0 = np.cross(Z, X0); t = np.radians(d[0])
+    X = np.cos(t) * X0 + np.sin(t) * Y0; Y = np.cross(Z, X)
+    M = np.eye(4); M[:3, :3] = np.c_[X, Y, Z]; M[:3, 3] = np.array(seat['o']) + d[1] * X0 + d[2] * Y0 + d[3] * Z
+    return M
+
+
+def seat_fit(seat, stl, Mpart):
+    """координатный спуск по (поворот, x, y, z): минимум объёма корпуса в пластике; поправки ограничены ±6° и ±1.5 мm"""
+    P = skin(); cell = 0.5 ** 3
+    def cost(ds):
+        pts = np.concatenate([trimesh.transform_points(P, pose(seat, d)) for d in ds])
+        return inside(stl, Mpart, pts).reshape(len(ds), -1).sum(1) * cell
+    d = np.zeros(4); best = cost([d])[0]; start = best
+    lim = np.array([6, 1.5, 1.5, 1.5])
+    for step in (np.array([2, .5, .5, .5]), np.array([1, .25, .25, .25]), np.array([.5, .1, .1, .1])):
+        while True:
+            cand = [np.clip(d + s * step * np.eye(4)[k], -lim, lim) for k in range(4) for s in (-1, 1)]
+            c = cost(cand); i = int(np.argmin(c))
+            if c[i] >= best - 1e-9: break
+            best, d = c[i], cand[i]
+    M = pose(seat, d)
+    return {'o': M[:3, 3].round(3).tolist(), 'z': M[:3, 2].round(5).tolist(), 'x': M[:3, 0].round(5).tolist()}, \
+           {'inside_mm3_before': round(float(start)), 'inside_mm3': round(float(best)), 'turn_deg': round(float(d[0]), 1), 'shift_mm': np.round(d[1:], 2).tolist()}
+
+
+def seats():
+    F = json.load(open(FIT)); P = load_dir(PRINT)
+    for rv, pn in SEAT_PART.items():
+        r = next(r for r in F['parts'][rv] if r['part'] == pn)
+        seat = F['servos'][rv][0]; seat = {k: seat[k] for k in ('o', 'z', 'x')} if 'urdf' not in seat else seat['urdf']
+        new, rep = seat_fit(seat, P[pn], np.array(r['M']))
+        F['servos'][rv] = [{**new, 'urdf': seat, 'fit': rep}]
+        print(f'{rv:10s} {pn:16s} в пластике {rep["inside_mm3_before"]} -> {rep["inside_mm3"]} мм³; поправка: поворот {rep["turn_deg"]}°, сдвиг {rep["shift_mm"]} мм')
+    json.dump(F, open(FIT, 'w'), indent=1, ensure_ascii=False)
+
+
 def build():
     F = json.load(open(FIT)); P = load_dir(PRINT)
     os.makedirs(os.path.join(V, 'stl', 'kdy'), exist_ok=True)
@@ -133,4 +196,5 @@ def build():
 
 if __name__ == '__main__':
     if sys.argv[1] == 'fit': fit(sys.argv[2])
+    elif sys.argv[1] == 'seats': seats()
     else: build()

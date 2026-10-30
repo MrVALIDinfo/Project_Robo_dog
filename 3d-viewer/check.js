@@ -98,3 +98,18 @@ export function segVsBody(p, q, body) {
   }
   return false;
 }
+
+// точка внутри замкнутого меша: чётность пересечений луча +Z (мм)
+export function insideBody(p, body) {
+  const { t, bb, n } = body; let c = 0;
+  for (let i = 0; i < n; i++) {
+    const j = i * 6;
+    if (bb[j] > p[0] || bb[j + 3] < p[0] || bb[j + 1] > p[1] || bb[j + 4] < p[1] || bb[j + 5] < p[2]) continue;
+    const o = i * 9, ax = t[o], ay = t[o + 1], bx = t[o + 3], by = t[o + 4], cx = t[o + 6], cy = t[o + 7];
+    const d = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy); if (Math.abs(d) < 1e-12) continue;
+    const l1 = ((by - cy) * (p[0] - cx) + (cx - bx) * (p[1] - cy)) / d, l2 = ((cy - ay) * (p[0] - cx) + (ax - cx) * (p[1] - cy)) / d, l3 = 1 - l1 - l2;
+    if (l1 < 0 || l2 < 0 || l3 < 0) continue;
+    if (l1 * t[o + 2] + l2 * t[o + 5] + l3 * t[o + 8] > p[2]) c++;
+  }
+  return c % 2 === 1;
+}

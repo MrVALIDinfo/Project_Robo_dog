@@ -3,7 +3,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js';
 import URDFLoader from './lib/URDFLoader.js';
-import { bodyTriangles, obbOf, obbVsBody, obbObb, segVsBody } from './check.js';
+import { bodyTriangles, obbOf, obbVsBody, obbObb, segVsBody, insideBody } from './check.js';
 
 const view = document.getElementById('view');
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -30,8 +30,9 @@ addEventListener('resize', resize); resize();
 const manager = new THREE.LoadingManager();
 const loader = new URDFLoader(manager);
 const rig = new THREE.Group(); scene.add(rig);
-let robot, shell = [], body = [], layout = null;
-const layoutReady = fetch('parts/layout.json').then(r => r.json()).then(j => layout = j);
+let robot, shell = [], body = [], layout = null, seats = null;
+const layoutReady = Promise.all([fetch('parts/layout.json').then(r => r.json()).then(j => layout = j),
+  fetch('parts/servo_seats.json').then(r => r.json()).then(j => seats = j)]);
 
 loader.load('spot_micro.urdf', r => {
   robot = r;
@@ -116,14 +117,12 @@ function makeServo(name, part) {
   tagPart(g, name, part, 'servo');
   return g;
 }
-// поставить серво: вал в точку p (мм) вдоль d, длинная ось (в сторону -корпуса) вдоль l
-function mountServo(parent, name, part, p, d, l) {
-  const s = makeServo(name, part);
-  const D = new THREE.Vector3(...d).normalize(), Lv = new THREE.Vector3(...l).normalize();
-  const Y = new THREE.Vector3().crossVectors(D, Lv).normalize();
-  s.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(Lv, Y, D));
-  s.position.set(MM(p[0]), MM(p[1]), MM(p[2]));
-  parent.add(s); return s;
+// поставить серво в гнездо: seat — в координатах STL-файла звена (мм): o — вал на верхе корпуса, z — вал, x — от корпуса к валу
+function seatServo(link, seat, name, part) {
+  const s = makeServo(name, part), vis = robot.links[link].children.find(c => c.isURDFVisual);
+  const X = new THREE.Vector3(...seat.x), Z = new THREE.Vector3(...seat.z), Y = new THREE.Vector3().crossVectors(Z, X);
+  s.matrix.makeBasis(X, Y, Z).scale(new THREE.Vector3(1000, 1000, 1000)).setPosition(...seat.o);   // визуал звена в мм (scale 0.001)
+  s.matrixAutoUpdate = false; vis.add(s); return s;
 }
 
 // ---- логотип Ala-Too IT & Business College на верхней крышке: синий диск Ø40 мм 1 мм, красное +0.6 мм, белое +1 мм ----
@@ -293,17 +292,17 @@ function addElectronics() {
   const NUM = { front_right: [3, 2, 1], rear_right: [6, 5, 4], rear_left: [9, 8, 7], front_left: [12, 11, 10] };  // плечо, бедро, колено
   const LEGN = { front_left: 'LF', front_right: 'RF', rear_left: 'LB', rear_right: 'RB' };
   for (const [leg, [fx, sy]] of Object.entries(sides)) {
-    const sh = robot.joints[`${leg}_shoulder`], lg = robot.joints[`${leg}_leg`], kn = robot.joints[`${leg}_foot`];
-    const mk = (parent, kind, i, num, p, d, l) => {
+    const mk = (link, kind, i, num, file) => {
       const label = `Серво ${LEGN[leg]}_${i} (${kind}) №${num} → канал PCA ${num - 1}, PDI-HV5523MG`;
-      const g = mountServo(parent, label, `servo_${LEGN[leg]}_${i}`, p, d, l);
-      servos.push({ g, ch: num - 1, name: label, leg, kind: i, fx, sy });
+      const g = seatServo(link, seats[file][0], label, `servo_${LEGN[leg]}_${i}`);
+      servos.push({ g, ch: num - 1, name: label, leg, kind: i, fx, sy, link });
     };
-    // гнёзда по STL: плечевой — в кронштейне плеча, качалка в переборке (ось y ±39, z 8, подшипник F625zz в стенке x ±68);
-    // бедренный — в верхней части бедра (наклон 8° как у детали), вал внутрь; коленный — в голени у колена, вал внутрь
-    mk(sh, 'плечо', 1, NUM[leg][0], [fx * 19, 0, 8], [fx, 0, 0], [0, 0, 1]);
-    mk(lg, 'бедро', 2, NUM[leg][1], [-2, -sy * 26, 0], [0, -sy, 0], [0.139, 0, 1]);
-    mk(kn, 'колено', 3, NUM[leg][2], [0, -sy * 18.5, 0], [0, -sy, 0], [0, 0, 1]);
+    // гнёзда сняты со сборки KDY (tools/kdy/fit_kdy.py -> parts/servo_seats.json): ось вала, верх корпуса, направление корпуса.
+    // плечевой — в кронштейне плеча (arm_joint), бедренный — в бедре (arm), коленный — в голени (wrist); качалка — в соседней детали
+    const lr = sy > 0 ? 'l' : 'r';
+    mk(`${leg}_shoulder_link`, 'плечо', 1, NUM[leg][0], `${lr}shoulder`);
+    mk(`${leg}_leg_link`, 'бедро', 2, NUM[leg][1], `${lr}arm`);
+    mk(`${leg}_foot_link`, 'колено', 3, NUM[leg][2], `${lr}foot`);
   }
   buildWiring();
 }
@@ -462,9 +461,21 @@ function runCheck() {
     if (pa === pb || A.m.userData.touch?.includes(pb) || B.m.userData.touch?.includes(pa)) continue;
     if (obbObb(A.o, B.o, 0.05)) { res(A.m).with.add(CAT[B.m.userData.cat] || pb); res(B.m).with.add(CAT[A.m.userData.cat] || pa); }
   }
-  // серво против корпуса (по одному на кинематическое место)
-  const servoHits = [];
-  for (const sv of servos) { const ms = []; sv.g.traverse(o => o.isMesh && ms.push(o)); const hit = ms.some(m => !m.userData.horn && obbVsBody(obbOf(m, baseInv), tris, 0)); if (hit) servoHits.push(sv.name.split(' №')[0]); }
+  // серво против корпуса и деталей ног: точки корпуса серво (шаг 2.5 мм, на 0.5 мм внутрь — допуск печати) внутри пластика
+  const servoHits = [], legTris = {};
+  const trisOf = (link) => legTris[link] ??= bodyTriangles(shell.filter(m => linkOf(m) === link), baseInv);
+  const v = new THREE.Vector3();
+  for (const sv of servos) {
+    const links = ['base_link', 'front_link', 'rear_link', ...['shoulder_link', 'leg_link', 'leg_link_cover', 'foot_link'].map(k => `${sv.leg}_${k}`)];
+    const M = new THREE.Matrix4().multiplyMatrices(baseInv, sv.g.matrixWorld), hit = {};
+    let tot = 0;
+    for (let x = -29.9; x <= 9.6; x += 2.5) for (let y = -9.6; y <= 9.6; y += 2.4) for (let z = -37.5; z <= -0.5; z += 2.5) {
+      v.set(MM(x), MM(y), MM(z)).applyMatrix4(M); const p = [v.x * 1000, v.y * 1000, v.z * 1000]; tot++;
+      for (const l of links) if (insideBody(p, trisOf(l))) hit[l] = (hit[l] || 0) + 1;
+    }
+    const cell = 40.5 * 20.2 * 38 / tot;
+    for (const [l, n] of Object.entries(hit)) servoHits.push(`${sv.name.split(' №')[0]} — ${PARTN[l.replace(/^(front|rear)_(left|right)_/, '')] || l}: ~${Math.round(n * cell)} мм³`);
+  }
   // 2) провода сквозь стенки корпуса
   const wireHits = [];
   for (const w of wires) if (w.check && !(w.mesh.userData.opt && !showOpt)) {
@@ -506,7 +517,8 @@ function renderReport() {
   rows.push(`${bad1.length ? bad : ok} Детали внутри корпуса: ${r.parts.length - bad1.length} из ${r.parts.length} без пересечений`);
   for (const p of bad1) rows.push(`&nbsp;&nbsp;${bad} <a href="#" data-hl="${p.part}">${CAT[p.cat] || p.name}</a>: ${p.body.length ? 'входит в корпус' : ''}${p.body.length && p.with.size ? '; ' : ''}${p.with.size ? 'задевает ' + [...p.with].join(', ') : ''}`);
   for (const p of near) rows.push(`&nbsp;&nbsp;${warn} <a href="#" data-hl="${p.part}">${CAT[p.cat] || p.name}</a>: ${p.notes.size ? [...p.notes].join('; ') : 'зазор до корпуса < 0.5 мм'}`);
-  rows.push(`${r.servoHits.length ? warn : ok} Серво в гнёздах кронштейнов: ${r.servoHits.length ? 'касаются рамы — ' + r.servoHits.join(', ') : 'корпус серво не задевает раму (вал и качалка входят в переборку)'}`);
+  rows.push(`${r.servoHits.length ? bad : ok} Серво PDI-HV5523MG в гнёздах деталей _cls: ${r.servoHits.length ? 'корпус входит в пластик' : 'корпус 40.5×20.2×38 мм не входит ни в раму, ни в детали ног (посадка плотная, допуск 0.5 мм)'}`);
+  for (const h of r.servoHits) rows.push(`&nbsp;&nbsp;${bad} ${h}`);
   rows.push(`${r.wireHits.length ? bad : ok} Провода: ${r.wireHits.length ? r.wireHits.length + ' проходят сквозь стенку' : 'ни один не проходит сквозь стенки'}`);
   for (const w of r.wireHits) rows.push(`&nbsp;&nbsp;${bad} ${w}`);
   rows.push(`${r.ribbon <= 200 ? ok : r.ribbon <= 300 ? warn : bad} Шлейф камеры: нужно ≈${Math.round(r.ribbon)} мм → ${r.ribbon <= 200 ? 'хватит 20 см' : r.ribbon <= 300 ? 'брать 30 см (20 см мало)' : 'не хватит даже 30 см'}`);
@@ -517,6 +529,7 @@ function renderReport() {
   const el = document.getElementById('report'); el.innerHTML = rows.join('<br>');
   el.querySelectorAll('[data-hl]').forEach(a => a.onclick = e => { e.preventDefault(); highlight(a.dataset.hl); });
 }
+const PARTN = { base_link: 'рама', front_link: 'передняя крышка', rear_link: 'задняя крышка', shoulder_link: 'кронштейн плеча (arm_joint)', leg_link: 'бедро (arm)', leg_link_cover: 'крышка бедра', foot_link: 'голень (wrist)' };
 // ---- электрика: расчёт по паспортным данным деталей из списка ----
 const E = {
   vFull: 8.4, vNom: 7.4, vCut: 6.4, servoV: [6.0, 8.4], fuse: 15, sw: 16, capV: 16, ubecA: 5, mah: 4000,
