@@ -80,21 +80,39 @@ export function obbObb(A, B, eps = 0) {
   return true;
 }
 
+// сетка 8 мм над треугольниками: отрезку проверяются только треугольники его ячеек
+function gridOf(body, cs = 8) {
+  if (body.grid) return body.grid;
+  const { bb, n } = body, cells = new Map(), key = (i, j, k) => (i * 73856093) ^ (j * 19349663) ^ (k * 83492791);
+  for (let t = 0; t < n; t++) {
+    const j = t * 6, lo = [0, 1, 2].map(a => Math.floor(bb[j + a] / cs)), hi = [0, 1, 2].map(a => Math.floor(bb[j + 3 + a] / cs));
+    for (let a = lo[0]; a <= hi[0]; a++) for (let b = lo[1]; b <= hi[1]; b++) for (let c = lo[2]; c <= hi[2]; c++) {
+      const k = key(a, b, c); let l = cells.get(k); if (!l) cells.set(k, l = []); l.push(t);
+    }
+  }
+  return (body.grid = { cells, cs, key });
+}
+
 // отрезок против корпуса (Möller–Trumbore), мм
 export function segVsBody(p, q, body) {
-  const { t, bb, n } = body;
+  const { t, bb } = body, { cells, cs, key } = gridOf(body);
   const lo = [Math.min(p[0], q[0]), Math.min(p[1], q[1]), Math.min(p[2], q[2])], hi = [Math.max(p[0], q[0]), Math.max(p[1], q[1]), Math.max(p[2], q[2])];
-  const dir = [q[0] - p[0], q[1] - p[1], q[2] - p[2]];
-  for (let i = 0; i < n; i++) {
-    const j = i * 6;
-    if (bb[j] > hi[0] || bb[j + 3] < lo[0] || bb[j + 1] > hi[1] || bb[j + 4] < lo[1] || bb[j + 2] > hi[2] || bb[j + 5] < lo[2]) continue;
-    const o = i * 9, e1 = [t[o + 3] - t[o], t[o + 4] - t[o + 1], t[o + 5] - t[o + 2]], e2 = [t[o + 6] - t[o], t[o + 7] - t[o + 1], t[o + 8] - t[o + 2]];
-    const pv = [dir[1] * e2[2] - dir[2] * e2[1], dir[2] * e2[0] - dir[0] * e2[2], dir[0] * e2[1] - dir[1] * e2[0]];
-    const det = e1[0] * pv[0] + e1[1] * pv[1] + e1[2] * pv[2]; if (Math.abs(det) < 1e-12) continue;
-    const tv = [p[0] - t[o], p[1] - t[o + 1], p[2] - t[o + 2]], u = (tv[0] * pv[0] + tv[1] * pv[1] + tv[2] * pv[2]) / det; if (u < 0 || u > 1) continue;
-    const qv = [tv[1] * e1[2] - tv[2] * e1[1], tv[2] * e1[0] - tv[0] * e1[2], tv[0] * e1[1] - tv[1] * e1[0]];
-    const v = (dir[0] * qv[0] + dir[1] * qv[1] + dir[2] * qv[2]) / det; if (v < 0 || u + v > 1) continue;
-    const s = (e2[0] * qv[0] + e2[1] * qv[1] + e2[2] * qv[2]) / det; if (s >= 0 && s <= 1) return true;
+  const dir = [q[0] - p[0], q[1] - p[1], q[2] - p[2]], seen = new Set();
+  const c0 = lo.map(v => Math.floor(v / cs)), c1 = hi.map(v => Math.floor(v / cs));
+  for (let a = c0[0]; a <= c1[0]; a++) for (let b = c0[1]; b <= c1[1]; b++) for (let c = c0[2]; c <= c1[2]; c++) {
+    const l = cells.get(key(a, b, c)); if (!l) continue;
+    for (const i of l) {
+      if (seen.has(i)) continue; seen.add(i);
+      const j = i * 6;
+      if (bb[j] > hi[0] || bb[j + 3] < lo[0] || bb[j + 1] > hi[1] || bb[j + 4] < lo[1] || bb[j + 2] > hi[2] || bb[j + 5] < lo[2]) continue;
+      const o = i * 9, e1 = [t[o + 3] - t[o], t[o + 4] - t[o + 1], t[o + 5] - t[o + 2]], e2 = [t[o + 6] - t[o], t[o + 7] - t[o + 1], t[o + 8] - t[o + 2]];
+      const pv = [dir[1] * e2[2] - dir[2] * e2[1], dir[2] * e2[0] - dir[0] * e2[2], dir[0] * e2[1] - dir[1] * e2[0]];
+      const det = e1[0] * pv[0] + e1[1] * pv[1] + e1[2] * pv[2]; if (Math.abs(det) < 1e-12) continue;
+      const tv = [p[0] - t[o], p[1] - t[o + 1], p[2] - t[o + 2]], u = (tv[0] * pv[0] + tv[1] * pv[1] + tv[2] * pv[2]) / det; if (u < 0 || u > 1) continue;
+      const qv = [tv[1] * e1[2] - tv[2] * e1[1], tv[2] * e1[0] - tv[0] * e1[2], tv[0] * e1[1] - tv[1] * e1[0]];
+      const v = (dir[0] * qv[0] + dir[1] * qv[1] + dir[2] * qv[2]) / det; if (v < 0 || u + v > 1) continue;
+      const s = (e2[0] * qv[0] + e2[1] * qv[1] + e2[2] * qv[2]) / det; if (s >= 0 && s <= 1) return true;
+    }
   }
   return false;
 }

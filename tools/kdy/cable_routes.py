@@ -39,6 +39,21 @@ def plan(side):
           for d in [(1,0,0),(-1,0,0),(0,1,0),(0,-1,0),(0,0,1),(0,0,-1)]:
               n=(c[0]+d[0],c[1]+d[1],c[2]+d[2])
               if all(0<=n[i]<G.shape[i] for i in range(3)) and free[n] and n not in prev: prev[n]=c; q.append(n)
+  def pull(path, free, G):                         # спрямление по прямой видимости: самый дальний видимый узел пути, без «лесенки» сетки
+      o=G[0,0,0]; h=G[1,0,0][0]-o[0] if G.shape[0]>1 else 2.0; h=abs(h)
+      sgn=np.sign([G[-1,0,0][0]-o[0], G[0,-1,0][1]-o[1], G[0,0,-1][2]-o[2]]); sgn[sgn==0]=1
+      def ok(a,b):
+          n=int(np.ceil(np.linalg.norm(b-a)/0.5))+1
+          for t in np.linspace(0,1,n):
+              q=np.round((a+(b-a)*t-o)/(h*sgn)).astype(int)
+              if (q<0).any() or (q>=free.shape).any() or not free[tuple(q)]: return False
+          return True
+      P=[np.array(q,float) for q in path]; out=[P[0]]; i=0
+      while i<len(P)-1:
+          j=len(P)-1
+          while j>i+1 and not ok(P[i],P[j]): j-=1
+          out.append(P[j]); i=j
+      return [q.round(1).tolist() for q in out]
   def dp(path,tol=1.0):
       P=np.array(path)
       def rec(i,j):
@@ -59,17 +74,17 @@ def plan(side):
   for clr in (1,0):
       free=~ndimage.binary_dilation(occ,iterations=clr) if clr else ~occ
       p=snap_bfs(free,(Mh@np.array([-33,sy*11.5,-4,1]))[:3],goal)          # щель у торца серво, над фланцем
-      if p: out['hip']=dp(p); out['hip_clear']=2*clr or 1; break
+      if p: out['hip']=pull(p,free,G); out['hip_clear']=2*clr or 1; break
   Tfoot=translation_matrix([0,0,-107.5])@euler_matrix(0,-1.5,0); ax=(Tfoot@np.array([0,sy*30,-16,1]))[:3]
   for clr in (1,0):                                                         # колено: от вывода серво к оси колена (снаружи)
       free=~ndimage.binary_dilation(occ,iterations=clr) if clr else ~occ
       p=snap_bfs(free,(Mk@np.array([-31,0,-33,1]))[:3],lambda q: np.linalg.norm(q-ax)<3,maxd=4.5)
-      if p: out['knee_down']=[(np.linalg.inv(Tfoot)@np.r_[q,1])[:3].round(0).astype(int).tolist() for q in map(np.array,dp(p))]; out['knee_down_clear']=2*clr or 1; break
+      if p: out['knee_down']=[(np.linalg.inv(Tfoot)@np.r_[q,1])[:3].round(1).tolist() for q in map(np.array,pull(p,free,G))]; out['knee_down_clear']=2*clr or 1; break
   top=np.array(out['hip'][-1]); tgoal=lambda p: np.linalg.norm(p-top)<1.5
   for clr in (1,0):                                                         # колено: от передней кромки бедра к верху бедра
       free=~ndimage.binary_dilation(occ,iterations=clr) if clr else ~occ
       p=snap_bfs(free,np.array([14,-sy*20,-80.]),tgoal)
-      if p: out['knee_up']=dp(p); out['knee_clear']=2*clr or 1; break
+      if p: out['knee_up']=pull(p,free,G); out['knee_clear']=2*clr or 1; break
   # 2) корпус: от верха бедра и от вывода плечевого серво к PCA, стойка
   for fx in (1,-1):
       Ts=translation_matrix([fx*93,sy*39,0]); Tleg=Ts@translation_matrix([0,sy*55,0])@euler_matrix(0,0.75,0)
@@ -83,7 +98,7 @@ def plan(side):
       g2=lambda p: abs(p[0])<=50 and abs(p[1])<=30 and 0<=p[2]<=16
       k='front' if fx>0 else 'rear'
       for nm,st in [('leg',(Tleg@np.array([*out['hip'][-1],1]))[:3]),('shoulder',(servo_M('shoulder',Ts@VS)@np.array([-31,0,-33,1]))[:3])]:
-          p=bfs(G,free,st,g2); out[f'{k}_{nm}']=dp(p,1.0) if p else None
+          p=bfs(G,free,st,g2); out[f'{k}_{nm}']=pull(p,free,G) if p else None
   return out
 
 
