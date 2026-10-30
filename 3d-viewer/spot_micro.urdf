@@ -19,7 +19,7 @@
   <link name="base_link">
     <visual>
       <geometry>
-        <mesh filename="stl/mainbody.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="stl/kdy/mainbody.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="black"/>
       <origin rpy="0 0 0" xyz="-0.042 -0.055 -0.010"/>
@@ -63,7 +63,7 @@
   <link name="rear_link">
     <visual>
       <geometry>
-        <mesh filename="stl/backpart_filled.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="stl/kdy/backpart_alatoo.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <origin rpy="0 0 3.14159" xyz="0.04 0.055 -0.010"/>
       <material name="yellow"/>
@@ -86,7 +86,7 @@
   <link name="front_link">
     <visual>
       <geometry>
-        <mesh filename="stl/frontpart.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="stl/kdy/frontpart.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <origin rpy="0 0 3.14159" xyz="0.040 0.055 -0.010"/>
       <material name="yellow"/>
@@ -110,7 +110,7 @@
   <link name="front_left_shoulder_link">
     <visual>
       <geometry>
-        <mesh filename="stl/lshoulder.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="stl/kdy/lshoulder.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <origin rpy="0 0 3.14159" xyz="0.135 0.015 -0.01"/>
       <material name="black"/>
@@ -129,7 +129,7 @@
   <link name="front_left_leg_link_cover">
     <visual>
       <geometry>
-        <mesh filename="stl/larm_cover.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="stl/kdy/larm_cover.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <origin rpy="0 -0.139 3.14159" xyz="0.130 -0.040 -0.025"/>
       <material name="yellow"/>
@@ -138,7 +138,7 @@
   <link name="front_left_leg_link">
     <visual>
       <geometry>
-        <mesh filename="stl/larm.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="stl/kdy/larm.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <origin rpy="0 -0.139 3.14159" xyz="0.130 -0.040 -0.025"/>
       <material name="black"/>
@@ -162,7 +162,7 @@
   <link name="front_left_foot_link">
     <visual>
       <geometry>
-        <mesh filename="stl/lfoot.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="stl/kdy/lfoot.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <origin rpy="0 0 3.14159" xyz="0.120 -0.04 0.1"/>
       <material name="black"/>
@@ -235,7 +235,7 @@
   <link name="front_right_shoulder_link">
     <visual>
       <geometry>
-        <mesh filename="stl/rshoulder.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="stl/kdy/rshoulder.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <origin rpy="0 0 3.14159" xyz="0.135 0.095 -0.01"/>
       <material name="black"/>
@@ -254,7 +254,7 @@
   <link name="front_right_leg_link_cover">
     <visual>
       <geometry>
-        <mesh filename="stl/rarm_cover.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="stl/kdy/rarm_cover.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <origin rpy="0 -0.139 3.14159" xyz="0.130 0.15 -0.025"/>
       <material name="yellow"/>
@@ -263,7 +263,7 @@
   <link name="front_right_leg_link">
     <visual>
       <geometry>
-        <mesh filename="stl/rarm.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="stl/kdy/rarm.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <origin rpy="0 -0.139 3.14159" xyz="0.130 0.15 -0.025"/>
       <material name="black"/>
@@ -287,7 +287,7 @@
   <link name="front_right_foot_link">
     <visual>
       <geometry>
-        <mesh filename="stl/rfoot.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="stl/kdy/rfoot.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <origin rpy="0 0 3.14159" xyz="0.120 0.15 0.1"/>
       <material name="black"/>
@@ -360,7 +360,7 @@
   <link name="rear_left_shoulder_link">
     <visual>
       <geometry>
-        <mesh filename="stl/lshoulder.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="stl/kdy/lshoulder.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <origin rpy="0 0 3.14159" xyz="0.135 0.015 -0.01"/>
       <material name="black"/>
@@ -379,7 +379,7 @@
   <link name="rear_left_leg_link_cover">
     <visual>
       <geometry>
-        <mesh filename="stl/larm_cover.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="stl/kdy/larm_cover.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <origin rpy="0 -0.139 3.14159" xyz="0.130 -0.040 -0.025"/>
       <material name="yellow"/>
@@ -388,7 +388,7 @@
   <link name="rear_left_leg_link">
     <visual>
       <geometry>
-        <mesh filename="stl/larm.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="stl/kdy/larm.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <origin rpy="0 -0.139 3.14159" xyz="0.130 -0.040 -0.025"/>
       <material name="black"/>
@@ -412,7 +412,7 @@
   <link name="rear_left_foot_link">
     <visual>
       <geometry>
-        <mesh filename="stl/lfoot.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="stl/kdy/lfoot.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <origin rpy="0 0 3.14159" xyz="0.120 -0.04 0.1"/>
       <material name="black"/>
@@ -485,7 +485,7 @@
   <link name="rear_right_shoulder_link">
     <visual>
       <geometry>
-        <mesh filename="stl/rshoulder.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="stl/kdy/rshoulder.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <origin rpy="0 0 3.14159" xyz="0.135 0.095 -0.01"/>
       <material name="black"/>
@@ -504,7 +504,7 @@
   <link name="rear_right_leg_link_cover">
     <visual>
       <geometry>
-        <mesh filename="stl/rarm_cover.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="stl/kdy/rarm_cover.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <origin rpy="0 -0.139 3.14159" xyz="0.130 0.15 -0.025"/>
       <material name="yellow"/>
@@ -513,7 +513,7 @@
   <link name="rear_right_leg_link">
     <visual>
       <geometry>
-        <mesh filename="stl/rarm.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="stl/kdy/rarm.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <origin rpy="0 -0.139 3.14159" xyz="0.130 0.15 -0.025"/>
       <material name="black"/>
@@ -537,7 +537,7 @@
   <link name="rear_right_foot_link">
     <visual>
       <geometry>
-        <mesh filename="stl/rfoot.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="stl/kdy/rfoot.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <origin rpy="0 0 3.14159" xyz="0.120 0.15 0.1"/>
       <material name="black"/>

@@ -152,7 +152,7 @@ async function addLogo() {
   holder.traverse(o => { if (o.isMesh) { Object.assign(o.userData, { name: 'Логотип Ala-Too IT & Business College (Ø40 мм, рельеф до 2 мм)', cat: 'logo' }); pick.push(o); } });
 }
 
-// ---- задняя надпись «ALA-TOO»: гравировка K.D.Y залита в stl/backpart_filled.stl, надпись — parts/rear_text.stl (tools/mounts/make_rear.py) ----
+// ---- задняя надпись «ALA-TOO»: гравировка K.D.Y залита в stl/kdy/backpart_alatoo.stl, надпись — parts/rear_text.stl (tools/mounts/make_rear.py) ----
 function addRearText() {
   stlLoader.load('parts/rear_text.stl', g => {
     g.scale(0.001, 0.001, 0.001);

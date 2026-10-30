@@ -75,7 +75,7 @@ mount = trimesh.boolean.difference([solid, *cuts], engine='manifold')
 sys.path.insert(0, os.path.dirname(__file__))
 def shell():
     out = []
-    for f, xyz, yaw in (('mainbody.stl', (-42, -55, -10), 0), ('backpart.stl', (40, 55, -10), np.pi), ('frontpart.stl', (40, 55, -10), np.pi)):
+    for f, xyz, yaw in (('kdy/mainbody.stl', (-42, -55, -10), 0), ('kdy/backpart_alatoo.stl', (40, 55, -10), np.pi), ('kdy/frontpart.stl', (40, 55, -10), np.pi)):
         m = trimesh.load(os.path.join(V, 'stl', f)); M = trimesh.transformations.rotation_matrix(yaw, [0, 0, 1]); M[:3, 3] = xyz
         m.apply_transform(M); out.append(m)
     return out

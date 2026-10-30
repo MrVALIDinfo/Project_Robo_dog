@@ -1,15 +1,16 @@
-"""Задняя крышка Spot Micro (backpart.stl): заливка гравировки «K.D.Y» и надпись «ALA-TOO».
+"""Задняя крышка Spot Micro (R_cover из KDY0523): заливка гравировки «K.D.Y» и надпись «ALA-TOO».
 
 На задней стенке под окном LCD вырезана надпись K.D.Y (местами насквозь). Скрипт заполняет
 её телом стенки (между наружной и внутренней плоскостью стенки) и выдавливает «ALA-TOO» на 0.8 мм.
 
 Пишет:
-  3d-viewer/stl/backpart_filled.stl — крышка без гравировки (координаты исходного STL), для 3D-модели
-  3d-viewer/parts/rear_text.stl     — надпись в системе base_link (мм), в 3D-модели красится отдельно
-  print/backpart_alatoo.stl         — крышка с надписью одним телом, для печати
+  3d-viewer/stl/kdy/backpart_alatoo.stl — нижняя крышка + задняя крышка без гравировки (координаты URDF-меша backpart), для 3D-модели
+  3d-viewer/parts/rear_text.stl         — надпись в системе base_link (мм), в 3D-модели красится отдельно
+  print/R_cover_alatoo.stl              — задняя крышка с надписью одним телом, в ориентации исходного R_cover, для печати
+Деталь берётся из print/kdy/R_cover.stl, её место — из tools/kdy/fit.json (tools/kdy/fit_kdy.py).
 Нужно: pip install numpy trimesh manifold3d networkx shapely matplotlib
 """
-import os
+import json, os
 import numpy as np, trimesh
 from shapely.geometry import Polygon
 from matplotlib.textpath import TextPath
@@ -21,9 +22,12 @@ TEXT, CAP, RELIEF = 'ALA-TOO', 6.0, 0.8        # надпись, высота з
 YC, ZC = 9.0, -20.5                           # центр надписи на стенке (base_link, мм)
 Y0, Y1, Z0, Z1 = -6.0, 35.0, -27.0, -15.5     # область заливки: гравировка y -1.3…32.6, z -25.3…-17.6
 
-# исходная деталь -> base_link (как в URDF: поворот 180° вокруг Z, сдвиг 40, 55, -10 мм)
+# URDF-меш backpart -> base_link (как в URDF: поворот 180° вокруг Z, сдвиг 40, 55, -10 мм)
 T = trimesh.transformations.rotation_matrix(np.pi, [0, 0, 1]); T[:3, 3] = [40, 55, -10]
-src = trimesh.load(os.path.join(V, 'stl', 'backpart.stl')); part = src.copy(); part.apply_transform(T)
+rows = {r['part']: np.array(r['M']) for r in json.load(open(os.path.join(ROOT, 'tools', 'kdy', 'fit.json')))['parts']['backpart']}
+bottom = trimesh.load(os.path.join(ROOT, 'print', 'kdy', 'non-mega_B_cover_cls.stl')); bottom.apply_transform(rows['non-mega_B_cover_cls'])
+TR = T @ rows['R_cover']                      # R_cover (как скачан) -> base_link
+part = trimesh.load(os.path.join(ROOT, 'print', 'kdy', 'R_cover.stl')); part.apply_transform(TR)
 
 # плоскости стенки: лучи изнутри назад по точкам вне гравировки и вне отверстия выключателя (y -35…-16)
 pts_o, pts_i = [], []
@@ -79,9 +83,9 @@ for g in glyphs:
 text = trimesh.util.concatenate(parts); text.apply_transform(M)
 print(f'надпись «{TEXT}»: {text.extents.round(1).tolist()} мм, y {text.bounds[0][1]:.1f}…{text.bounds[1][1]:.1f}, z {text.bounds[0][2]:.1f}…{text.bounds[1][2]:.1f}')
 
-Ti = np.linalg.inv(T)
-out = filled.copy(); out.apply_transform(Ti); out.export(os.path.join(V, 'stl', 'backpart_filled.stl'))
+out = filled.copy(); out.apply_transform(np.linalg.inv(T))
+trimesh.util.concatenate([bottom, out]).export(os.path.join(V, 'stl', 'kdy', 'backpart_alatoo.stl'))
 text.export(os.path.join(V, 'parts', 'rear_text.stl'))
-pr = trimesh.boolean.union([filled, text], engine='manifold'); pr.apply_transform(Ti)
-pr.export(os.path.join(ROOT, 'print', 'backpart_alatoo.stl'))
+pr = trimesh.boolean.union([filled, text], engine='manifold'); pr.apply_transform(np.linalg.inv(TR))
+pr.export(os.path.join(ROOT, 'print', 'R_cover_alatoo.stl'))
 print('watertight:', out.is_watertight, pr.is_watertight)
