@@ -1,6 +1,7 @@
 """Cardboard Robo-dog (SpotMicro proportions, 1:1) — flat parts with tabs/slots.
 
 World frame (mm): x forward, y left, z up. Hip axes at x=+-93, z=0; knee 107.5 below hip.
+Плоскости лап по ширине (y) — по настоящим деталям KDY0523 в 3D-модели (3d-viewer/stl/kdy).
 Every part is a flat polygon in its own (u, v) frame, extruded by its thickness along n = e1 x e2.
 """
 import numpy as np
@@ -33,10 +34,24 @@ UPPER = Polygon([(84, 24), (100, 25), (110, 17), (97, -84), (104, -104), (100, -
 LOWER = Polygon([(85, -88), (100, -88), (104, -92), (104, -96), (102, -98), (103, -137), (106, -140), (108, -172),
                  (108, -225), (110, -233), (100, -241), (87, -241), (77, -234), (74, -218), (80, -216), (91, -203),
                  (93, -197), (92, -165), (79, -129), (79, -96)]).buffer(-2, join_style='mitre').buffer(2, quad_segs=6)
-# y slabs (outer-face coordinates) for the front-left leg
-SH_Y = ((53, 56), (70, 73))
-UP_Y = ((73, 76), (104, 107))
-LO_Y = ((79, 82), (98, 101))
+# y slabs (outer-face coordinates) for the front-left leg — по настоящим деталям KDY (стойка, передняя левая):
+#   бедро (arm + cover) y 76.9…112.0, ось бедра y = 94; голень (wrist) y 82.7…103 (у колена серво до 120);
+#   кронштейн плеча y 27.5…65 (наполовину внутри корпуса) — в картоне плечо снаружи борта, от борта до бедра
+SH_Y = ((53, 56), (71, 74))
+UP_Y = ((77, 80), (109, 112))
+LO_Y = ((83, 86), (100, 103))
+def fill(y0, y1):            # шайбы толщиной T, заполняющие зазор y0…y1 (outer-face y каждой)
+    n = int(round((y1 - y0) / T)); return [y0 + i * T for i in range(n)]
+KNEE_GAPS = fill(UP_Y[0][1], LO_Y[0][0]) + fill(LO_Y[1][1], UP_Y[1][0])   # между бедром и голенью
+HIP_GAPS = fill(SH_Y[1][1], UP_Y[0][0])                                 # между плечом и бедром
+KNEE_PIN = (UP_Y[0][0] - T, UP_Y[1][1] + T)                              # шпажка колена: от заглушки до заглушки
+AXLE = 2 * (UP_Y[1][1] + T) + 4                                          # шпажка-ось через всю собаку, мм
+KNEE_PIN_MM = round(KNEE_PIN[1] - KNEE_PIN[0] + 4)                       # с запасом 2 мм на каждую заглушку
+# washer codes: Ш1 — заглушка колена внутри, Ш2…Шk — между бедром и голенью, затем заглушка колена снаружи, шайбы плечо–бедро, заглушка оси
+W_KNEE_IN, W_KNEE_GAP = 1, list(range(2, 2 + len(KNEE_GAPS)))
+W_KNEE_OUT = 2 + len(KNEE_GAPS)
+W_HIP_GAP = list(range(W_KNEE_OUT + 1, W_KNEE_OUT + 1 + len(HIP_GAPS)))
+W_HIP_OUT = W_KNEE_OUT + 1 + len(HIP_GAPS)
 SH_SPACERS, UP_SPACERS, LO_SPACERS = (18.0, -21.0), (14.0, -25.0, -60.0), (-95.0, -140.0, -226.0)
 
 
@@ -185,20 +200,21 @@ def build():
         parts += [spacer(f'Б{3 + i}', 'Распорка бедра', UPPER, z, UP_Y, ['Б1', 'Б2']) for i, z in enumerate(UP_SPACERS)]
         parts += [plate('Г1', 'Голень, внутренняя', LOWER, LO_Y[0]), plate('Г2', 'Голень, наружная', LOWER, LO_Y[1])]
         parts += [spacer(f'Г{3 + i}', 'Распорка голени', LOWER, z, LO_Y, ['Г1', 'Г2']) for i, z in enumerate(LO_SPACERS)]
-        # washers: knee (inner cap, 2 between, outer cap) + hip outer cap
+        # шайбы: колено (заглушка, зазоры бедро–голень, заглушка), ось бедра (зазор плечо–бедро, заглушка снаружи)
         hx, kz = fx * HIP_X, KNEE_DZ
-        wy = [(kz, 70, 'Ш', 'колено, внутр.'), (kz, 76, 'Ш', 'колено'), (kz, 101, 'Ш', 'колено'),
-              (kz, 107, 'Ш', 'колено, снаружи'), (0.0, 107, 'Ш', 'ось бедра, снаружи')]
-        for j, (z, y0, c, t) in enumerate(wy):
+        wy = [(kz, KNEE_PIN[0], 'колено, заглушка внутри')] + [(kz, y, 'колено, между бедром и голенью') for y in KNEE_GAPS] + \
+             [(kz, UP_Y[1][1], 'колено, заглушка снаружи')] + [(0.0, y, 'ось бедра, между плечом и бедром') for y in HIP_GAPS] + \
+             [(0.0, UP_Y[1][1], 'ось бедра, заглушка снаружи')]
+        for j, (z, y0, t) in enumerate(wy):
             yc = side * (y0 + T / 2)
-            parts.append(Part(f'{leg}-Ш{j + 1}', 'Шайба', disc(8), (hx, yc, z), (1, 0, 0), (0, 0, 1), kind='washer',
+            parts.append(Part(f'{leg}-Ш{j + 1}', f'Шайба: {t}', disc(8), (hx, yc, z), (1, 0, 0), (0, 0, 1), kind='washer',
                               label_n=out, **g))
         # skewers (not cut): knee pin
-        parts.append(Part(f'{leg}-шп', 'Шпажка колена 40 мм', disc(PIN_D / 2 - 0.3, (0, 0)),
-                          (hx, side * 90, kz), (1, 0, 0), (0, 0, 1), thick=40, kind='pin', **g))
+        parts.append(Part(f'{leg}-шп', f'Шпажка колена {KNEE_PIN_MM} мм', disc(PIN_D / 2 - 0.3, (0, 0)),
+                          (hx, side * (KNEE_PIN[0] + KNEE_PIN[1]) / 2, kz), (1, 0, 0), (0, 0, 1), thick=KNEE_PIN_MM, kind='pin', **g))
     for fx, nm in ((+1, 'перед'), (-1, 'зад')):
-        parts.append(Part(f'ОСЬ-{nm}', f'Шпажка-ось ({nm}) 220 мм', disc(PIN_D / 2 - 0.3), (fx * HIP_X, 0, 0),
-                          (1, 0, 0), (0, 0, 1), thick=220, kind='pin', group='pin'))
+        parts.append(Part(f'ОСЬ-{nm}', f'Шпажка-ось ({nm}) {AXLE:.0f} мм', disc(PIN_D / 2 - 0.3), (fx * HIP_X, 0, 0),
+                          (1, 0, 0), (0, 0, 1), thick=AXLE, kind='pin', group='pin'))
     for p in parts:
         if p.kind == 'pin' and p.leg:
             p.group = 'leg'
@@ -262,7 +278,7 @@ def pose(parts, hip=0.0, knee=0.0):
             code = p.code.split('-')[1]
             fx = LEGS[p.leg][1]
             hipc = (fx * HIP_X, 0, 0); kneec = (fx * HIP_X, 0, KNEE_DZ)
-            if code[0] in 'БГ' or code == 'шп' or code in ('Ш1', 'Ш2', 'Ш3', 'Ш4', 'Ш5'):
+            if code[0] in 'БГШ' or code == 'шп':
                 M = rot_y(hip, hipc)
                 if code[0] == 'Г':
                     M = M @ rot_y(knee, kneec)
