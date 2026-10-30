@@ -60,7 +60,7 @@ manager.onError = u => console.error('не загрузилось', u);
 function linkOf(o) { while (o && !o.isURDFLink) o = o.parent; return o?.urdfName; }
 
 // ===== детали =====
-// Всё в системе base_link, мм: X вперёд, Y влево, Z вверх. Верх плиты электроники z = -7, плита x -47…48, y ±52.
+// Всё в системе base_link, мм: X вперёд, Y влево, Z вверх. Плита — гладкая plate_plain mike4192, верх z = -7.1, x -47…48, y ±52.
 const stlLoader = new STLLoader();
 const pick = [];              // наведение мышью
 const solids = [];            // проверка стыковки
@@ -77,6 +77,18 @@ function loadPart(file, color, name, part, parent, pos, extra = {}, ud = {}) {
     const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color, roughness: .55, metalness: .25, ...extra }));
     m.position.set(MM(pos[0]), MM(pos[1]), MM(pos[2]));
     Object.assign(m.userData, ud); parent.add(m); tagPart(m, name, part);
+    if (!--pending) onPartsLoaded();
+  });
+}
+// печатная площадка mike4192: в файле Y — вверх, X×Z — 62–65×25–56 мм; ставится на плиту (o — угол, z — верх плиты)
+function platform(file, name, o, part) {
+  pending++;
+  stlLoader.load('parts/' + file, g => {
+    g.scale(0.001, 0.001, 0.001);
+    const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: 0x3a3d44, roughness: .7, metalness: .05 }));
+    m.matrix.makeBasis(new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, -1, 0)).setPosition(MM(o[0]), MM(o[1]), MM(o[2]));
+    m.matrixAutoUpdate = false; Object.assign(m.userData, { touch: ['pi', 'pca', 'mpu', 'cap'], mount: true });   // стоит на плите — касание плиты не в счёт
+    robot.links.base_link.add(m); tagPart(m, name, part, 'plat');
     if (!--pending) onPartsLoaded();
   });
 }
@@ -170,13 +182,13 @@ const wires = [];             // { mesh, name, r, pts | dyn, check }
 const V3 = (a) => new THREE.Vector3(MM(a[0]), MM(a[1]), MM(a[2]));
 
 // Raspberry Pi 3B: плата 85×56, начало — левый нижний угол (вид сверху, гребёнка сверху, USB справа), низ платы z = 0
-const PI0 = [-48, -47.5, -2];                         // угол платы в base_link; низ платы на 5 мм над плитой; отверстия 58×49 мимо бобышек Arduino на плите
+const PI0 = [-48, -47.5, -1.6];                       // угол платы в base_link; Pi на площадке mike4192 (5.5 мм) на скотче к плите — сверлить плиту не нужно
 const piB = (x, y, z) => [PI0[0] + x, PI0[1] + y, PI0[2] + z];
 function piPin(n) { const c = Math.floor((n - 1) / 2); return piB(8.37 + 2.54 * c, n % 2 ? 51.23 : 53.77, 1.4 + 8.5); }
 const PI_USB = { A: piB(87.1, 47, 12.3), B: piB(87.1, 29, 12.3) };    // верхние порты USB (стопки на Y=47 и Y=29)
 const PI_CSI = piB(45, 15.25, 7);
 // PCA9685 (CAD Adafruit 815): 16 каналов по 3 контакта со стороны Pi, группы по 4; клеммник V+ с другой стороны
-const PCA_AT = [-5, 38, -4];
+const PCA_AT = [-5, 38, -3.6];                         // PCA9685 на площадке mike4192 (5.5 мм): низ платы z -1.6
 const GST = [-25, -12.9, 2.3, 15.6];
 function pcaCh(c, row) {      // row: 0 GND, 1 V+, 2 PWM
   const g = Math.floor(c / 4), k = c % 4;
@@ -189,7 +201,7 @@ const PCA_I2C2 = { GND: [PCA_AT[0] + 14.5, PCA_AT[1] + 11, PCA_AT[2] + 5], VCC: 
 const MPU_AT = [37.5, 33, -3];
 const MPU_PIN = Object.fromEntries(['VCC', 'GND', 'SCL', 'SDA', 'XDA', 'XCL', 'AD0', 'INT'].map((n, i) => [n, [MPU_AT[0] - 8.89 + 2.54 * i, MPU_AT[1] - 6.9, MPU_AT[2] + 7.6]]));
 // нижний отсек (между плитой z -10 и дном z -36): аккумулятор по центру, UBEC слева, разветвитель и ADS1115 справа
-const BATT = { lo: [-57, -23.5, -35.5], hi: [58, 23.5, -10.5] };     // предел отсека 127×48×26 мм
+const BATT = { lo: [-47, -23.5, -35.5], hi: [47, 23.5, -10.4] };     // Reedy #306 shorty 94×47×25.1 мм; отсек 127×48×26 мм
 const UBEC = { lo: [-15, 25.5, -23], hi: [30, 47.5, -11] };
 const UBEC_IN = { V: [30.5, 34, -17], G: [30.5, 39, -17] }, UBEC_OUT = { V: [-15.5, 34, -17], G: [-15.5, 39, -17] };
 const YS = { lo: [-56, -46, -22], hi: [-16, -28, -12] };
@@ -224,11 +236,12 @@ function addElectronics() {
   bx(pi, `${PI}: процессор BCM2837`, 'pi', [22, 25, 1.4], [36, 39, 2.6], 0x55585e, { edges: false });
   bx(pi, `${PI}: слот microSD`, 'pi', [0.5, 20.5, -1.5], [14, 35.5, 0], silver, { metal: .7 });
   bx(pi, 'microSD 16–32 ГБ', 'pi', [-2.5, 22, -1.2], [12, 33, -0.4], 0x2b2f8f, { cat: 'sd' });
-  for (const [x, y] of [[3.5, 3.5], [61.5, 3.5], [3.5, 52.5], [61.5, 52.5]]) cy(pi, `${PI}: стойка M2.5×5 + винт M2.5×10 (отверстия в плите сверлить)`, 'pi', [x, y, -2.5], 2.4, 5, 'z', 0xc9a227, { seg: 6, metal: .7, ud: { mount: true } });
+  platform('raspberry_pi_platform.stl', 'Площадка Raspberry Pi (печать, mike4192 thing:4596267) на двустороннем скотче, Pi — саморезы/M2.5', [PI0[0], PI0[1] + 56, -7.05], 'piplat');
 
   // --- PCA9685 + конденсатор 2200 мкФ 16 В на клеммнике V+ ---
   loadPart('pca_c.stl', 0x2b64d6, 'PCA9685, 16-канальный драйвер серв (CAD Adafruit 815), I²C 0x40, логика 3.3 В', 'pca', base, PCA_AT);
-  cy(base, 'Конденсатор 2200 мкФ 16 В на клеммнике V+/GND PCA9685 (гасит броски от серв)', 'cap', [-18, 38, 4.85], 6.25, 25, 'x', 0x1d3f8f, { ud: { touch: ['pca'] } });
+  platform('servo_board_platform.stl', 'Площадка PCA9685 (печать, mike4192 thing:4596267) на двустороннем скотче', [PCA_AT[0] - 31.2, PCA_AT[1] + 12.6, -7.05], 'pcaplat');
+  cy(base, 'Конденсатор 2200 мкФ 16 В на клеммнике V+/GND PCA9685 (гасит броски от серв)', 'cap', [-18, 38, PCA_AT[2] + 8.85], 6.25, 25, 'x', 0x1d3f8f, { ud: { touch: ['pca'] } });
 
   // --- MPU-6050 (GY-521) ---
   const mpu = group(base, MPU_AT), MP = 'MPU-6050 (GY-521), I²C 0x68';
@@ -258,14 +271,14 @@ function addElectronics() {
   bx(base, 'I²C-переходник PCF8574 (LCD), питание 5 В', 'lcd', [-134, 8, -11], [-124, 44, 3], 0x2a64d6, { rough: .6 });
 
   // --- питание ---
-  bx(base, 'LiPo 2S 4000 мАч, 7.4 В — допустимый габарит ≤ 115×47×25 мм (139 мм не входит!)', 'batt', BATT.lo, BATT.hi, 0x1b4fa8, { rough: .6, ud: { note: 'до плиты 0.5 мм: высота аккумулятора не больше 25–26 мм' } });
+  bx(base, 'LiPo 2S 4000 мАч shorty (например Reedy #306, 94×47×25.1 мм, 202 г); обычный 138 мм не входит', 'batt', BATT.lo, BATT.hi, 0x1b4fa8, { rough: .6, ud: { note: 'до плиты 0.4 мм: высота аккумулятора не больше 25.5 мм' } });
   bx(base, 'LiPo 2S (наклейка)', 'batt', [-30, -23.8, -35.8], [30, 23.8, -10.2], 0xe8e8e8, { rough: .6, check: false });
   bx(base, 'XT60: разъём аккумулятора (папа+мама)', 'xt60', XT.lo, XT.hi, 0xe6c000, { rough: .5 });
   bx(base, 'Y-разветвитель XT60: PCA9685 V+ и UBEC', 'xt60', YS.lo, YS.hi, 0xe6c000, { rough: .5 });
   bx(base, 'Держатель предохранителя (ATC), провод 14 AWG', 'fuse', FUSE.lo, FUSE.hi, 0x1c1c20, { rough: .5 });
   bx(base, 'Предохранитель 15 А (синий)', 'fuse', [-138, -2, -17], [-130, 18, -13.5], 0x2a6fdb, { rough: .4 });
   const sw = group(base, SW_AT); sw.rotation.y = SW_TILT;
-  const SWN = 'Выключатель 19×13 мм (мини-рокер, ≥16 А @12 В DC) в штатном отверстии';
+  const SWN = 'Выключатель Switch Components RF1-1A-DC (16 А при 12 В DC, вырез 19.2×13.0 мм) в штатном отверстии';
   bx(sw, `${SWN}: рамка`, 'sw', [-2.5, -10.5, -7.5], [0, 10.5, 7.5], 0x111111, { ud: { note: 'в отверстии 19×13 мм зазор ~0.2 мм — так и надо; от клемм до перегородки 0.6 мм, провода паять и отводить вбок' } });
   bx(sw, `${SWN}: клавиша`, 'sw', [-5, -8, -5.5], [-2.5, 8, 5.5], 0xc0262d);
   bx(sw, `${SWN}: корпус`, 'sw', [0, -9.3, -6.3], [18, 9.3, 6.3], 0x222222, { ud: { note: 'в отверстии 19×13 мм зазор ~0.2 мм — так и надо; от клемм до перегородки 0.6 мм, провода паять и отводить вбок' } });
@@ -432,18 +445,32 @@ function buildWiring() {
       });
     });
   }
+  // разъёмы удлинителей 30 см: на конце своего провода серво (265 мм от серво) — у бедренных и коленных серв
+  for (const sv of servos.filter(s => s.kind > 1)) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(MM(14), MM(8), MM(5)), new THREE.MeshStandardMaterial({ color: 0x15171c, roughness: .6 }));
+    m.add(new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry), edgeMat));
+    Object.assign(m.userData, { name: `${sv.name.split(' →')[0]}: разъём удлинителя 30 см (Dupont 3 pin), ${SERVO_LEAD} мм от серво`, cat: 'ext', part: 'ext', nocheck: true });
+    robot.links.base_link.add(m); pick.push(m); junctions.push({ m, sv });
+  }
   robot.updateMatrixWorld(true);
-  wires.forEach(rebuildWire);
+  wires.forEach(rebuildWire); updateJunctions();
+}
+const junctions = [];
+function updateJunctions() {
+  for (const j of junctions) {
+    const c = servoCurve(j.sv.path(1)), u = Math.max(0, 1 - SERVO_LEAD / (c.getLength() * 1000));
+    j.m.position.copy(c.getPointAt(u)); j.m.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), c.getTangentAt(u)); j.at = j.m.position.toArray().map(x => x * 1000);
+  }
 }
 let camRibbon = null;
 let wireTick = 0;
-function updateWires() { if ((wireTick++ % 3) === 0) wires.forEach(w => { if (w.dyn) rebuildWire(w); }); }
+function updateWires() { if ((wireTick++ % 3) === 0) { wires.forEach(w => { if (w.dyn) rebuildWire(w); }); updateJunctions(); } }
 
 // ===== легенда =====
 const CAT = {
   pi: 'Raspberry Pi 3B', sd: 'microSD 16–32 ГБ', pca: 'PCA9685', cap: 'Конденсатор 2200 мкФ 16 В', mpu: 'MPU-6050 (GY-521)', cam: 'Камера Pi v2', cammount: 'Кронштейн камеры (печать)',
   lcd: 'LCD 16×2 I²C', batt: 'LiPo 2S 4000 мАч', xt60: 'XT60 + Y-разветвитель', fuse: 'Предохранитель 15 А', sw: 'Выключатель', ubec: 'UBEC 5V/5A', buzz: 'Пищалка разряда',
-  mic: 'USB-микрофон', spk: 'USB-динамик', ads: 'ADS1115 + делитель (опция)', servo: 'Серво PDI-HV5523MG ×12', wire: 'Провода', servowire: 'Кабели серв (+ удлинители)', logo: 'Логотип и надпись',
+  mic: 'USB-микрофон', spk: 'USB-динамик', plat: 'Площадки Pi и PCA9685 (печать)', ext: 'Разъёмы удлинителей серв', ads: 'ADS1115 + делитель (опция)', servo: 'Серво PDI-HV5523MG ×12', wire: 'Провода', servowire: 'Кабели серв (+ удлинители)', logo: 'Логотип и надпись',
 };
 function buildLegend() {
   const seen = new Map();
@@ -489,6 +516,8 @@ function runCheck() {
     const cell = 40.5 * 20.2 * 38 / tot;
     for (const [l, n] of Object.entries(hit)) servoHits.push(`${sv.name.split(' №')[0]} — ${PARTN[l.replace(/^(front|rear)_(left|right)_/, '')] || l}: ~${Math.round(n * cell)} мм³`);
   }
+  updateJunctions();
+  const jIn = junctions.filter(j => Math.abs(j.at[0]) < 66 && Math.abs(j.at[1]) < 52 && j.at[2] > -8 && j.at[2] < 24).length;
   // 2) провода сквозь стенки корпуса
   const wireHits = [];
   for (const w of wires) if (w.check && !(w.mesh.userData.opt && !showOpt)) {
@@ -520,7 +549,7 @@ function runCheck() {
   const cables = servos.map((sv, i) => ({ name: sv.name.split(' (')[0] + ' ' + ['плечо', 'бедро', 'колено'][sv.kind - 1], len: need[i], ext: need[i] + SLACK > SERVO_LEAD }));
   // 4) обзор камеры: лучи по полю зрения против корпуса и ног
   const fov = cameraView();
-  report = { parts: [...parts.values()], servoHits, wireHits, cableHits: [...cableHits].map(([k, v]) => `${k} (${v})`), cables, ribbon: camRibbon.len, fov, ms: performance.now() - t0 };
+  report = { parts: [...parts.values()], servoHits, wireHits, jIn, jN: junctions.length, cableHits: [...cableHits].map(([k, v]) => `${k} (${v})`), cables, ribbon: camRibbon.len, fov, ms: performance.now() - t0 };
   window.spotReport = report; window.spot = { robot, servos, body, solids, wires, tris, camera, controls, rig };
   renderReport(); renderElec();
 }
@@ -554,6 +583,7 @@ function renderReport() {
   for (const w of r.cableHits) rows.push(`&nbsp;&nbsp;${bad} ${w}`);
   rows.push(`${r.ribbon <= 200 ? ok : r.ribbon <= 300 ? warn : bad} Шлейф камеры: нужно ≈${Math.round(r.ribbon)} мм → ${r.ribbon <= 200 ? 'хватит 20 см' : r.ribbon <= 300 ? 'брать 30 см (20 см мало)' : 'не хватит даже 30 см'}`);
   rows.push(`${extN ? warn : ok} Кабели серв (свой провод ${SERVO_LEAD} мм, запас ${SLACK} мм): удлинитель нужен на ${extN} из 12`);
+  rows.push(`${r.jIn === r.jN ? ok : warn} Разъёмы удлинителей: ${r.jIn} из ${r.jN} внутри корпуса${r.jIn === r.jN ? '' : ', остальные на ноге или у плеча — закрепить стяжкой, чтобы не попали в сустав'}`);
   rows.push('<table class="cab">' + r.cables.map(c => `<tr><td>${c.name}</td><td>${Math.round(c.len)} мм</td><td>${c.ext ? (c.len + SLACK <= SERVO_LEAD + EXT ? 'удлинитель' : bad + ' мало 30 см') : 'хватает'}</td></tr>`).join('') + '</table>');
   if (r.fov) rows.push(`${r.fov.blocked - r.fov.legs ? warn : ok} Обзор камеры: корпус закрывает ${r.fov.blocked - r.fov.legs} из ${r.fov.total} лучей${r.fov.legs ? `, ноги — ${r.fov.legs}` : ''} (включи «Поле зрения камеры»)`);
   rows.push(`<span style="color:var(--mut)">проверено за ${Math.round(r.ms)} мс; ${showOpt ? 'с опцией ADS1115' : 'без опций'}</span>`);
