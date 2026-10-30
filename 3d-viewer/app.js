@@ -194,6 +194,7 @@ function pcaCh(c, row) {      // row: 0 GND, 1 V+, 2 PWM
   const g = Math.floor(c / 4), k = c % 4;
   return [PCA_AT[0] + GST[g] + 1.3 + 2.54 * k, PCA_AT[1] + (-6.5 - 2.5 * row), PCA_AT[2] + 7.5];
 }
+const plugTop = (c, row) => { const p = pcaCh(c, row); return [p[0], p[1], PCA_AT[2] + 20.1]; };   // провод выходит из верха штекера
 const PCA_VPLUS = [PCA_AT[0] - 2.2, PCA_AT[1] + 9, PCA_AT[2] + 12.5], PCA_VGND = [PCA_AT[0] + 2.2, PCA_AT[1] + 9, PCA_AT[2] + 12.5];
 const PCA_I2C = { SDA: [PCA_AT[0] - 22, PCA_AT[1] + 11, PCA_AT[2] + 5], SCL: [PCA_AT[0] - 19.5, PCA_AT[1] + 11, PCA_AT[2] + 5], VCC: [PCA_AT[0] - 17, PCA_AT[1] + 11, PCA_AT[2] + 5], GND: [PCA_AT[0] - 14.5, PCA_AT[1] + 11, PCA_AT[2] + 5] };
 const PCA_I2C2 = { GND: [PCA_AT[0] + 14.5, PCA_AT[1] + 11, PCA_AT[2] + 5], VCC: [PCA_AT[0] + 17, PCA_AT[1] + 11, PCA_AT[2] + 5], SCL: [PCA_AT[0] + 19.5, PCA_AT[1] + 11, PCA_AT[2] + 5], SDA: [PCA_AT[0] + 22, PCA_AT[1] + 11, PCA_AT[2] + 5] };
@@ -430,7 +431,7 @@ function buildWiring() {
     const G = (x, y, z) => local(sv.g, [x, y, z]);                                  // система серво
     const onBody = (p) => Math.abs(p[0]) >= 75 ? local(S, [p[0] - sv.fx * 93, p[1] - sy * 39, p[2]]) : p;   // в кронштейн плеча или в корпус
     sv.path = (row = 1) => {
-      const a = pcaCh(sv.ch, row), pts = [a, [a[0], a[1] - 4, a[2] + 8]];
+      const a = plugTop(sv.ch, row), pts = [a, [a[0], a[1] - 4, a[2] + 4]];
       if (sv.kind === 1) pts.push(...[...R[`${k}_shoulder`]].reverse().map(onBody));
       else {
         pts.push(...[...R[`${k}_leg`]].reverse().slice(0, -1).map(onBody));
@@ -445,12 +446,20 @@ function buildWiring() {
       });
     });
   }
-  // разъёмы удлинителей 30 см: на конце своего провода серво (265 мм от серво) — у бедренных и коленных серв
+  // штекеры серв на гребёнке PCA9685 (мама 3 pin, 2.5×7.6×14 мм) — стоят вертикально на штырях
+  for (const sv of servos) {
+    const lo = pcaCh(sv.ch, 0), hi = pcaCh(sv.ch, 2);
+    bx(base, `${sv.name.split(' →')[0]}: штекер на канале ${sv.ch} PCA9685 (GND · V+ · PWM)`, 'plug', [lo[0] - 1.25, hi[1] - 1.3, PCA_AT[2] + 6.1], [lo[0] + 1.25, lo[1] + 1.3, PCA_AT[2] + 20.1], 0x15171c, { cat: 'ext', check: false });
+  }
+  // стык «своего провода серво (265 мм) и удлинителя»: мама серво (чёрная) + папа удлинителя (серая), вдоль кабеля
   for (const sv of servos.filter(s => s.kind > 1)) {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(MM(14), MM(8), MM(5)), new THREE.MeshStandardMaterial({ color: 0x15171c, roughness: .6 }));
-    m.add(new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry), edgeMat));
-    Object.assign(m.userData, { name: `${sv.name.split(' →')[0]}: разъём удлинителя 30 см (Dupont 3 pin), ${SERVO_LEAD} мм от серво`, cat: 'ext', part: 'ext', nocheck: true });
-    robot.links.base_link.add(m); pick.push(m); junctions.push({ m, sv });
+    const g = new THREE.Group();
+    for (const [x0, x1, col] of [[0, 14, 0x15171c], [-12, 0, 0x8a8f99]]) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(MM(x1 - x0), MM(7.6), MM(2.6)), new THREE.MeshStandardMaterial({ color: col, roughness: .6 }));
+      m.position.x = MM((x0 + x1) / 2); m.add(new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry), edgeMat)); g.add(m);
+    }
+    robot.links.base_link.add(g); junctions.push({ g, sv });
+    g.traverse(o => { if (o.isMesh) { Object.assign(o.userData, { cat: 'ext', part: 'ext', nocheck: true }); pick.push(o); } });
   }
   robot.updateMatrixWorld(true);
   wires.forEach(rebuildWire); updateJunctions();
@@ -458,8 +467,10 @@ function buildWiring() {
 const junctions = [];
 function updateJunctions() {
   for (const j of junctions) {
-    const c = servoCurve(j.sv.path(1)), u = Math.max(0, 1 - SERVO_LEAD / (c.getLength() * 1000));
-    j.m.position.copy(c.getPointAt(u)); j.m.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), c.getTangentAt(u)); j.at = j.m.position.toArray().map(x => x * 1000);
+    const c = servoCurve(j.sv.path(1)), L = c.getLength() * 1000, u = Math.max(0, 1 - SERVO_LEAD / L);
+    j.g.position.copy(c.getPointAt(u)); j.g.quaternion.setFromUnitVectors(new THREE.Vector3(-1, 0, 0), c.getTangentAt(u)); j.at = j.g.position.toArray().map(x => x * 1000);
+    const name = `${j.sv.name.split(' →')[0]}: стык своего провода серво (265 мм, мама) и удлинителя ${extLen(L)} см (папа), ${Math.round(L - SERVO_LEAD)} мм до PCA9685`;
+    j.g.traverse(o => { if (o.isMesh) o.userData.name = name; });
   }
 }
 let camRibbon = null;
@@ -470,7 +481,7 @@ function updateWires() { if ((wireTick++ % 3) === 0) { wires.forEach(w => { if (
 const CAT = {
   pi: 'Raspberry Pi 3B', sd: 'microSD 16–32 ГБ', pca: 'PCA9685', cap: 'Конденсатор 2200 мкФ 16 В', mpu: 'MPU-6050 (GY-521)', cam: 'Камера Pi v2', cammount: 'Кронштейн камеры (печать)',
   lcd: 'LCD 16×2 I²C', batt: 'LiPo 2S 4000 мАч', xt60: 'XT60 + Y-разветвитель', fuse: 'Предохранитель 15 А', sw: 'Выключатель', ubec: 'UBEC 5V/5A', buzz: 'Пищалка разряда',
-  mic: 'USB-микрофон', spk: 'USB-динамик', plat: 'Площадки Pi и PCA9685 (печать)', ext: 'Разъёмы удлинителей серв', ads: 'ADS1115 + делитель (опция)', servo: 'Серво PDI-HV5523MG ×12', wire: 'Провода', servowire: 'Кабели серв (+ удлинители)', logo: 'Логотип и надпись',
+  mic: 'USB-микрофон', spk: 'USB-динамик', plat: 'Площадки Pi и PCA9685 (печать)', ext: 'Штекеры серв и удлинители', ads: 'ADS1115 + делитель (опция)', servo: 'Серво PDI-HV5523MG ×12', wire: 'Провода', servowire: 'Кабели серв (+ удлинители)', logo: 'Логотип и надпись',
 };
 function buildLegend() {
   const seen = new Map();
@@ -479,7 +490,8 @@ function buildLegend() {
 }
 
 // ===== проверка стыковки, длин кабелей, обзора камеры =====
-const SERVO_LEAD = 265, SLACK = 20, EXT = 300;     // провод серво 265 мм (по продавцу), запас на изгибы, удлинитель 30 см
+const SERVO_LEAD = 265, SLACK = 20;                // провод серво 265 мм (по продавцу), запас на изгибы
+const extLen = (L) => [10, 20, 30].find(e => L + SLACK <= SERVO_LEAD + e * 10) ?? 0;   // самый короткий удлинитель, которого хватает: лишний провод не сворачивать в корпусе
 let report = null;
 function onPartsLoaded() { buildLegend(); setTimeout(runCheck, 50); }
 function runCheck() {
@@ -546,7 +558,7 @@ function runCheck() {
     }
   });
   applyJoints(saved); robot.updateMatrixWorld(true); wires.forEach(rebuildWire);
-  const cables = servos.map((sv, i) => ({ name: sv.name.split(' (')[0] + ' ' + ['плечо', 'бедро', 'колено'][sv.kind - 1], len: need[i], ext: need[i] + SLACK > SERVO_LEAD }));
+  const cables = servos.map((sv, i) => ({ name: sv.name.split(' (')[0] + ' ' + ['плечо', 'бедро', 'колено'][sv.kind - 1], len: need[i], ext: need[i] + SLACK > SERVO_LEAD, el: extLen(need[i]) }));
   // 4) обзор камеры: лучи по полю зрения против корпуса и ног
   const fov = cameraView();
   report = { parts: [...parts.values()], servoHits, wireHits, jIn, jN: junctions.length, cableHits: [...cableHits].map(([k, v]) => `${k} (${v})`), cables, ribbon: camRibbon.len, fov, ms: performance.now() - t0 };
@@ -584,7 +596,7 @@ function renderReport() {
   rows.push(`${r.ribbon <= 200 ? ok : r.ribbon <= 300 ? warn : bad} Шлейф камеры: нужно ≈${Math.round(r.ribbon)} мм → ${r.ribbon <= 200 ? 'хватит 20 см' : r.ribbon <= 300 ? 'брать 30 см (20 см мало)' : 'не хватит даже 30 см'}`);
   rows.push(`${extN ? warn : ok} Кабели серв (свой провод ${SERVO_LEAD} мм, запас ${SLACK} мм): удлинитель нужен на ${extN} из 12`);
   rows.push(`${r.jIn === r.jN ? ok : warn} Разъёмы удлинителей: ${r.jIn} из ${r.jN} внутри корпуса${r.jIn === r.jN ? '' : ', остальные на ноге или у плеча — закрепить стяжкой, чтобы не попали в сустав'}`);
-  rows.push('<table class="cab">' + r.cables.map(c => `<tr><td>${c.name}</td><td>${Math.round(c.len)} мм</td><td>${c.ext ? (c.len + SLACK <= SERVO_LEAD + EXT ? 'удлинитель' : bad + ' мало 30 см') : 'хватает'}</td></tr>`).join('') + '</table>');
+  rows.push('<table class="cab">' + r.cables.map(c => `<tr><td>${c.name}</td><td>${Math.round(c.len)} мм</td><td>${c.ext ? (c.el ? `удлинитель ${c.el} см` : bad + ' мало 30 см') : 'хватает'}</td></tr>`).join('') + '</table>');
   if (r.fov) rows.push(`${r.fov.blocked - r.fov.legs ? warn : ok} Обзор камеры: корпус закрывает ${r.fov.blocked - r.fov.legs} из ${r.fov.total} лучей${r.fov.legs ? `, ноги — ${r.fov.legs}` : ''} (включи «Поле зрения камеры»)`);
   rows.push(`<span style="color:var(--mut)">проверено за ${Math.round(r.ms)} мс; ${showOpt ? 'с опцией ADS1115' : 'без опций'}</span>`);
   const el = document.getElementById('report'); el.innerHTML = rows.join('<br>');
