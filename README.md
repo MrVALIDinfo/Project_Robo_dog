@@ -2,7 +2,7 @@
 
 Проект робособаки на базе открытого проекта **Spot Micro** ([mike4192/spotMicro](https://github.com/mike4192/spotMicro), рама KDY0523).
 
-**Версия 2.6** — что изменилось, в [CHANGELOG.md](CHANGELOG.md).
+**Версия 2.7** — что изменилось, в [CHANGELOG.md](CHANGELOG.md).
 
 ## Что в репозитории
 

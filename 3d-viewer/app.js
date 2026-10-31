@@ -541,12 +541,17 @@ function buildLegend() {
 const SERVO_LEAD = 265, SLACK = 20;                // провод серво 265 мм (по продавцу), запас на изгибы
 const extLen = (L) => [10, 20, 30].find(e => L + SLACK <= SERVO_LEAD + e * 10) ?? 0;   // самый короткий удлинитель, которого хватает: лишний провод не сворачивать в корпусе
 let report = null;
-function onPartsLoaded() { buildLegend(); setTimeout(runCheck, 50); }
-function runCheck() {
+function onPartsLoaded() { buildLegend(); setTimeout(runCheck, 800); }
+let checking = false;
+// проверка идёт кусками с паузами: между кусками собака возвращается в свою текущую позу, страница не замирает
+async function runCheck() {
+  if (checking) return; checking = true;
   const t0 = performance.now(), base = robot.links.base_link;
-  const saved = Object.fromEntries(Object.entries(robot.joints).map(([n, j]) => [n, j.angle]));
-  applyJoints(POSES.stand); robot.updateMatrixWorld(true);
-  const baseInv = base.matrixWorld.clone().invert();
+  const live = () => Object.fromEntries(Object.entries(robot.joints).map(([n, j]) => [n, j.angle]));
+  const yieldUI = () => new Promise(r => setTimeout(r, 0));
+  const atPose = p => { const keep = live(); applyJoints(p); robot.updateMatrixWorld(true); baseInv.copy(base.matrixWorld).invert(); return () => { applyJoints(keep); robot.updateMatrixWorld(true); }; };
+  const baseInv = new THREE.Matrix4();
+  let back = atPose(POSES.stand);
   const tris = bodyTriangles(body, baseInv);
   // 1) детали против корпуса и друг против друга
   const items = solids.filter(m => !m.userData.nocheck && !m.userData.part?.startsWith('servo_') && !(m.userData.opt && !showOpt)).map(m => ({ m, o: obbOf(m, baseInv) }));
@@ -561,11 +566,13 @@ function runCheck() {
     if (pa === pb || A.m.userData.touch?.includes(pb) || B.m.userData.touch?.includes(pa)) continue;
     if (obbObb(A.o, B.o, 0.05)) { res(A.m).with.add(CAT[B.m.userData.cat] || pb); res(B.m).with.add(CAT[A.m.userData.cat] || pa); }
   }
+  back(); await yieldUI(); back = atPose(POSES.stand);
   // серво против корпуса и деталей ног: точки корпуса серво (шаг 2.5 мм, на 0.5 мм внутрь — допуск печати) внутри пластика
   const servoHits = [], legTris = {};
   const trisOf = (link) => legTris[link] ??= bodyTriangles(shell.filter(m => linkOf(m) === link), baseInv);
   const v = new THREE.Vector3();
   for (const sv of servos) {
+    back(); await yieldUI(); back = atPose(POSES.stand);
     const links = ['base_link', 'front_link', 'rear_link', ...['shoulder_link', 'leg_link', 'leg_link_cover', 'foot_link'].map(k => `${sv.leg}_${k}`)];
     const M = new THREE.Matrix4().multiplyMatrices(baseInv, sv.g.matrixWorld), hit = {};
     let tot = 0;
@@ -578,6 +585,7 @@ function runCheck() {
   }
   updateJunctions();
   const jNeed = junctions.filter(j => j.need), jIn = jNeed.filter(j => Math.abs(j.at[0]) < 66 && Math.abs(j.at[1]) < 52 && j.at[2] > -8 && j.at[2] < 24).length;
+  back(); await yieldUI();
   // 2) провода сквозь стенки корпуса
   const wireHits = [];
   for (const w of wires) if (w.check && !(w.mesh.userData.opt && !showOpt)) {
@@ -588,11 +596,12 @@ function runCheck() {
   const poses = [POSES.stand, POSES.sit];
   for (const crouch of [0, 1]) for (const fast of [0, 1]) for (let k = 0; k < 8; k++) for (const turn of [0, 1]) poses.push(gaitPose(k / 8, turn ? 0 : 1, turn, fast, crouch));
   const need = servos.map(() => 0);
-  for (const p of poses) { applyJoints(p); robot.updateMatrixWorld(true); servos.forEach((sv, i) => { need[i] = Math.max(need[i], servoCurve(sv.path(1)).getLength() * 1000); }); }
+  for (let pi = 0; pi < poses.length; pi++) { if (pi % 6 === 0) await yieldUI(); const bk = atPose(poses[pi]); servos.forEach((sv, i) => { need[i] = Math.max(need[i], servoCurve(sv.path(1)).getLength() * 1000); }); bk(); }
   // кабели серв сквозь раму и детали ног: стойка, сидя, присед и 4 фазы шага; осевая линия кабеля с шагом 2 мм
   const cableHits = new Map(), PN = ['стойка', 'сидя', 'присед'];
-  [POSES.stand, POSES.sit, gaitPose(0, 1, 0, 0, 1), ...[0, 2, 4, 6].map(k => gaitPose(k / 8, 1, 0, 1, 0))].forEach((p, pi) => {
-    applyJoints(p); robot.updateMatrixWorld(true);
+  const cposes = [POSES.stand, POSES.sit, gaitPose(0, 1, 0, 0, 1), ...[0, 2, 4, 6].map(k => gaitPose(k / 8, 1, 0, 1, 0))];
+  for (let pi = 0; pi < cposes.length; pi++) {
+    await yieldUI(); const bk = atPose(cposes[pi]);
     const inv = base.matrixWorld.clone().invert(), T = {};
     for (const sv of servos) {
       const P = (c => c.getSpacedPoints(Math.ceil(c.getLength() * 500)))(servoCurve(sv.path(1))).map(v => v.toArray().map(x => x * 1000));
@@ -604,14 +613,17 @@ function runCheck() {
         }
       }
     }
-  });
-  applyJoints(saved); robot.updateMatrixWorld(true); wires.forEach(rebuildWire);
+    bk();
+  }
+  wireSig = '';
   const cables = servos.map((sv, i) => ({ name: sv.name.split(' (')[0] + ' ' + ['плечо', 'бедро', 'колено'][sv.kind - 1], len: need[i], ext: need[i] + SLACK > SERVO_LEAD, el: extLen(need[i]) }));
   // 4) обзор камеры: лучи по полю зрения против корпуса и ног
-  const fov = cameraView();
+  await yieldUI(); back = atPose(POSES.stand); const fov = cameraView(); back();
   report = { parts: [...parts.values()], servoHits, wireHits, jIn, jN: jNeed.length, cableHits: [...cableHits].map(([k, v]) => `${k} (${v})`), cables, ribbon: camRibbon.len, fov, ms: performance.now() - t0 };
   window.spotReport = report; window.spot = { robot, servos, body, solids, wires, tris, camera, controls, rig };
   renderReport(); renderElec();
+  (window.__perf ??= {}).check = Math.round(performance.now() - t0);
+  checking = false;
 }
 function cameraView() {
   if (!lensAt) return null;
@@ -732,19 +744,33 @@ addEventListener('keydown', e => { if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyC', 
 addEventListener('blur', () => keys.clear());
 addEventListener('keyup', e => keys.delete(e.code));
 // углы суставов в фазе шага: fwd -1/0/1, turn -1/0/1, fast 0/1, cr — присед 0…1, a — амплитуда
+// Стопа задаётся в системе корпуса; на опоре она стоит на полу, а корпус поворачивается и едет над ней.
+// Поворот: стопы на опоре поворачиваются вокруг центра корпуса на -ΔΨ (корпус — на +ΔΨ); IK ноги с плечом (ось X) — лапы шагают вбок, а не скользят.
+const HIPY = 0.055;                                        // сустав бедра от оси плеча вбок (URDF)
+const SHO = { front_left: [0.093, 0.039], front_right: [0.093, -0.039], rear_left: [-0.093, 0.039], rear_right: [-0.093, -0.039] };
+const TURN_STEP = 0.24;                                    // поворот корпуса за полшага, рад
+function legIK(left, fx, fy, fz) {                         // стопа относительно оси плеча -> [плечо, бедро, колено]
+  const fyl = left ? fy : -fy, d = Math.sqrt(Math.max(1e-6, fy * fy + fz * fz - HIPY * HIPY));
+  let phi = Math.atan2(fz, fyl) + Math.atan2(d, HIPY); if (!left) phi = -phi;
+  const [a1, a2] = ik(fx, -d);
+  return [phi, a1, a2];
+}
 function gaitPose(ph0, fwd, turn, fast, cr, a = 1) {
   const S = fast ? 0.085 : 0.065, H = 0.035;
-  const dir = fwd !== 0 ? fwd : 1, stride = fwd !== 0 ? S : S * 0.45;
   const zNow = Z0 + cr * (ZS - Z0), out = {};
   NAMES.forEach(n => {
-    const left = n.endsWith('left');
+    const left = n.endsWith('left'), sy = left ? 1 : -1, [shx, shy] = SHO[n];
     const diag = (n === 'front_left' || n === 'rear_right') ? 0 : 0.5;
-    let ph = (ph0 + diag) % 1, x, z;
-    const st = stride * a * (fwd !== 0 ? 1 : (left ? -turn : turn)) * dir;
-    if (ph < 0.5) { const p = ph / 0.5; x = X0 + st * (0.5 - p); z = zNow; }
-    else { const p = (ph - 0.5) / 0.5; x = X0 + st * (-0.5 + p); z = zNow + H * a * Math.sin(Math.PI * p); }
-    const [a1, a2] = ik(x, z);
-    out[n + '_shoulder'] = 0; out[n + '_leg'] = a1; out[n + '_foot'] = a2;
+    const ph = (ph0 + diag) % 1;
+    let k, lift = 0;                                        // k: +0.5 (стопа впереди) … -0.5 (сзади) на опоре, обратно — в переносе
+    if (ph < 0.5) k = 0.5 - ph / 0.5;
+    else { const p = (ph - 0.5) / 0.5; k = -0.5 + p; lift = H * a * Math.sin(Math.PI * p); }
+    const bx = shx + X0, by = shy + sy * HIPY;              // стопа в стойке, система корпуса
+    const ang = k * TURN_STEP * turn * a, c = Math.cos(ang), s = Math.sin(ang);
+    const fx = bx * c - by * s - shx + k * S * fwd * a;
+    const fy = bx * s + by * c - shy;
+    const [p0, p1, p2] = legIK(left, fx, fy, zNow + lift);
+    out[n + '_shoulder'] = p0; out[n + '_leg'] = p1; out[n + '_foot'] = p2;
   });
   return out;
 }
@@ -760,7 +786,7 @@ function gaitStep(dt) {
   if (amp > 0.02) phase = (phase + dt / T) % 1;
   for (const [j, v] of Object.entries(gaitPose(phase, fwd, turn, fast, crouch, amp))) setJ(j, v);
   const v = (S / (T * 0.5)) * amp * fwd;
-  rig.rotation.y += turn * (fast ? 1.6 : 1.1) * amp * dt;
+  rig.rotation.y += turn * TURN_STEP * amp / (T * 0.5) * dt;                // корпус поворачивается ровно настолько, насколько повернулись стопы на опоре
   const hx = Math.cos(rig.rotation.y), hz = -Math.sin(rig.rotation.y);
   const dx = hx * v * dt, dz = hz * v * dt;
   rig.position.x += dx; rig.position.z += dz;
@@ -934,6 +960,6 @@ renderer.setAnimationLoop(() => {
   if (ex) ex.update(dt);
   if (camTween) camTween(dt);
   contact.position.x = rig.position.x; contact.position.z = rig.position.z; contact.rotation.z = rig.rotation.y; contact.visible = !exOpen;
-  if (statsQ && robot) { statsN++; if (statsN === 4) document.title = JSON.stringify({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, meshes: (() => { let n = 0; scene.traverse(o => { if (o.isMesh || o.isLine) n++; }); return n; })(), geos: renderer.info.memory.geometries, ms: +((performance.now() - statsT) / 3).toFixed(1) }); if (statsN === 1) statsT = performance.now(); }
+  if (statsQ && robot && window.__perf?.check && (!location.search.includes('explode') || window.__perf.explode)) { statsN++; if (statsN === 4) document.title = JSON.stringify({ perf: window.__perf, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, meshes: (() => { let n = 0; scene.traverse(o => { if (o.isMesh || o.isLine) n++; }); return n; })(), geos: renderer.info.memory.geometries, ms: +((performance.now() - statsT) / 3).toFixed(1) }); if (statsN === 1) statsT = performance.now(); }
   controls.update(); renderer.render(scene, camera);
 });

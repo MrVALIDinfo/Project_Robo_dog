@@ -137,6 +137,11 @@ def main():
             if nutg: nutp = h + d * ((g0[0] + g0[1]) / 2)
             elif how.startswith('насквозь'): far = S1 if head == S0 else S0; nutp = h + d * far + dd * (NUT_H[D] / 2)
             else: nutp = None
+            inside = [i for i in np.nonzero(solid & (ts >= S0) & (ts <= S1))[0] if who[i]]
+            far = S1 if head == S0 else S0
+            near_name = lambda t_: next(iter(sorted(who[min(inside, key=lambda i: abs(ts[i] - t_))])), None) if inside else None
+            f['joins'] = sorted({n for i in inside for n in who[i]})            # какие печатные детали стягивает (для анимации)
+            f['headPart'] = near_name(head); f['nutPart'] = near_name(far)
             f.update({'len': int(pick), 'head': hp.round(2).tolist(), 'dir': dd.round(4).tolist(), 'nut': None if nutp is None else nutp.round(2).tolist(),
                       'hexhead': False, 'span': round(float(S1 - S0), 1), 'need': round(float(need), 1), 'sure': bool(cand), 'how': how.split(',')[0]})
             key = f"{g[1:] if g[0] in 'lr' else g}|M{D}|{how.split(' ')[0]}|нужно {need:.1f}|{'OK' if ok else 'ПЛОХО'} {f['len']}|подходит {cand[:3]}"
@@ -153,6 +158,14 @@ def main():
                 near = min((q for q in lst if q is not f and q['size'] == 'M3' and q.get('span', 0) >= 3), key=lambda q: np.linalg.norm(np.array(q['head']) - np.array(f['head'])))
                 f.update({k: near[k] for k in ('len', 'how', 'need')}); f['dir'] = near['dir'] if np.dot(near['dir'], f['dir']) > 0 else f['dir']
                 if f['nut'] is None and near['nut'] is not None: f['nut'] = (np.array(f['head']) + np.array(f['dir']) * (np.dot(np.array(near['nut']) - np.array(near['head']), near['dir']))).round(2).tolist()
+    # крышки KDY держатся только на M5 (отверстия Ø5.2 в крышках); M3 переборок крышка лишь накрывает сверху — это не стягиваемая деталь
+    COVERS = {'F_cover', 'R_cover', 'non-mega_T_cover_cls', 'non-mega_B_cover_cls'}
+    for lst in J['fasteners'].values():
+        for f in lst:
+            if f['size'] == 'M3' and 'joins' in f:
+                f['joins'] = [n for n in f['joins'] if n not in COVERS]
+                for k in ('headPart', 'nutPart'):
+                    if f.get(k) in COVERS: f[k] = next((n for n in f['joins'] if n != f.get('nutPart' if k == 'headPart' else 'headPart')), f['joins'][0] if f['joins'] else None)
     if '--apply' in sys.argv:
         json.dump(J, open(os.path.join(ROOT, '3d-viewer', 'parts', 'explode.json'), 'w'), indent=1); print('записано в 3d-viewer/parts/explode.json')
     print('BOM KDY0523: M4x20 40, M4x15 8, M3x20 4, M3x10 28, M5x15 8; гайки M4 48, M3 16')

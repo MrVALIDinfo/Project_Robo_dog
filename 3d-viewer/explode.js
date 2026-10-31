@@ -50,6 +50,7 @@ export function createExplode(ctx) {
   let prepP = null;
   function prepare() { return prepP ??= doPrepare(); }
   async function doPrepare() {
+    const tp0 = performance.now();
     data = await (await fetch('parts/explode.json')).json();
     robot.updateMatrixWorld(true);
     const geos = new Map();
@@ -155,14 +156,15 @@ export function createExplode(ctx) {
           // направление «наружу» в системе base_link
           const wHead = head.clone().applyMatrix4(frame), wDir = d.clone().transformDirection(frame);
           const bHead = wHead.clone().applyMatrix4(baseInv).multiplyScalar(1000), bDir = wDir.clone().transformDirection(baseInv);
-          // какие детали стягивает болт: вершины стенок отверстия вдоль его оси (а не габаритные коробки — у крышки она охватывает весь корпус)
-          const J = joined(owners[leg || 'body'], bHead, bDir, f.len, D);
+          // какие детали стягивает болт — посчитано заранее по геометрии (tools/explode/check_fasteners.py --apply)
+          const byName = nm => { const c = owners[leg || 'body'].filter(o => o.name === nm); return c.length ? c.reduce((p, q) => q.box.distanceToPoint(bHead) < p.box.distanceToPoint(bHead) ? q : p) : null; };
+          const J = (f.joins || []).map(byName).filter(Boolean).map(o => ({ o }));
           const moving = J.filter(j => j.o.u.segs.some(sg => sg[2] > sg[1] && (sg[0][0] || sg[0][1] || sg[0][2])));
           const sep = moving.length ? Math.min(...moving.map(j => j.o.u.segs[0][1])) : INNER;            // когда эти детали разъединяются
           let a = sep - 0.85 + Math.random() * 0.15, b = a + 0.65;                                      // выкрутить прямо перед этим
           if (leg) { a = Math.max(a, LEG_OUT[1] + 0.02 + Math.random() * 0.1); b = Math.min(INNER - 0.03, a + 0.55); }   // болты ноги — когда нога уже отъехала
-          const headU = J.length ? J.reduce((p, q) => q.t0 < p.t0 ? q : p).o.u : null;                  // деталь со стороны головки
-          const nutU = J.length ? J.reduce((p, q) => q.t1 > p.t1 ? q : p).o.u : null;                   // деталь со стороны гайки
+          const headU = byName(f.headPart)?.u ?? J[0]?.o.u ?? null;                                     // деталь со стороны головки
+          const nutU = byName(f.nutPart)?.u ?? null;                                                    // деталь со стороны гайки
           const out = bDir.clone().multiplyScalar(-(f.len + 12));                                       // болт выходит целиком, головкой наружу
           const bu = addUnit([bolt], [[out.toArray(), a, b], ...(headU ? headU.segs : [])], { spin: { o: bolt.children[0], turns: f.len / 2.5, a, b }, fast: true, bob: headU?.bob, phOf: headU, label: nFast === 0 ? 'Крепёж: болты M3/M4/M5, гайки' : null });
           if (nut) addUnit([nut], [[bDir.clone().multiplyScalar(14).toArray(), a, b], ...((nutU || headU) ? (nutU || headU).segs : [])], { spin: { o: nut.children[0], turns: -2, a, b }, fast: true, bob: (nutU || headU)?.bob, phOf: nutU || headU });
@@ -182,32 +184,15 @@ export function createExplode(ctx) {
     units.forEach(u => u.ph = Math.random() * Math.PI * 2);
     units.forEach(u => { if (u.phOf) u.ph = u.phOf.ph; });         // болты и логотип покачиваются вместе со своей деталью
     buildLabels();
-    ready = true;
+    ready = true; (window.__perf ??= {}).explode = Math.round(performance.now() - tp0);
   }
 
-  // деталь-владелец: вершины меша в системе base_link (мм) для поиска стягиваемых деталей
+  // деталь-владелец: имя детали печати и габарит в системе base_link (мм) — чтобы различать две одинаковые переборки
   function owner(u, m) {
     m.updateMatrixWorld(true);
-    const M = new THREE.Matrix4().multiplyMatrices(base.matrixWorld.clone().invert(), m.matrixWorld), pos = m.geometry.attributes.position, v = new THREE.Vector3();
-    const P = new Float32Array(pos.count * 3);
-    for (let k = 0; k < pos.count; k++) { v.fromBufferAttribute(pos, k).applyMatrix4(M).multiplyScalar(1000); P[3 * k] = v.x; P[3 * k + 1] = v.y; P[3 * k + 2] = v.z; }
-    const box = new THREE.Box3().setFromArray(P);
-    return { u, P, box };
-  }
-  function joined(list, h, d, L, D) {
-    const res = [], R = D / 2 + 1.2, seg = new THREE.Box3().setFromPoints([h, h.clone().addScaledVector(d, L)]).expandByScalar(R + 1);
-    for (const o of list) {
-      if (!o.box.intersectsBox(seg)) continue;
-      let n = 0, t0 = 1e9, t1 = -1e9;
-      for (let k = 0; k < o.P.length; k += 3) {
-        const x = o.P[k] - h.x, y = o.P[k + 1] - h.y, z = o.P[k + 2] - h.z, t = x * d.x + y * d.y + z * d.z;
-        if (t < -1 || t > L + 1) continue;
-        const px = x - t * d.x, py = y - t * d.y, pz = z - t * d.z;
-        if (px * px + py * py + pz * pz < R * R) { n++; if (t < t0) t0 = t; if (t > t1) t1 = t; }
-      }
-      if (n >= 3) res.push({ o, t0, t1 });
-    }
-    return res;
+    const box = new THREE.Box3().setFromObject(m).applyMatrix4(base.matrixWorld.clone().invert());
+    box.min.multiplyScalar(1000); box.max.multiplyScalar(1000);
+    return { u, box, name: m.userData.exPart };
   }
   function nearest(list, p) {
     let best = null, bd = 1e9;

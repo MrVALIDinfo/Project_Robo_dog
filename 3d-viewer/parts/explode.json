@@ -121,6 +121,12 @@
     ],
     "hexhead": false,
     "span": 25.0,
+    "joins": [
+     "L_arm_cls_cable",
+     "L_arm_cover"
+    ],
+    "headPart": "L_arm_cls_cable",
+    "nutPart": "L_arm_cover",
     "need": 23.2,
     "sure": true,
     "how": "\u0433\u0430\u0439\u043a\u0430 \u0432 \u043f\u0440\u043e\u0440\u0435\u0437\u0438 4.5 \u043c\u043c"
@@ -145,6 +151,12 @@
     ],
     "hexhead": false,
     "span": 25.0,
+    "joins": [
+     "L_arm_cls_cable",
+     "L_arm_cover"
+    ],
+    "headPart": "L_arm_cls_cable",
+    "nutPart": "L_arm_cover",
     "need": 23.2,
     "sure": true,
     "how": "\u0433\u0430\u0439\u043a\u0430 \u0432 \u043f\u0440\u043e\u0440\u0435\u0437\u0438 4.5 \u043c\u043c"
@@ -169,6 +181,11 @@
     ],
     "hexhead": false,
     "span": 12.8,
+    "joins": [
+     "L_arm_cls_cable"
+    ],
+    "headPart": "L_arm_cls_cable",
+    "nutPart": "L_arm_cls_cable",
     "need": 16.8,
     "sure": true,
     "how": "\u043d\u0430\u0441\u043a\u0432\u043e\u0437\u044c"
@@ -193,6 +210,11 @@
     ],
     "hexhead": false,
     "span": 12.8,
+    "joins": [
+     "L_arm_cls_cable"
+    ],
+    "headPart": "L_arm_cls_cable",
+    "nutPart": "L_arm_cls_cable",
     "need": 16.8,
     "sure": true,
     "how": "\u043d\u0430\u0441\u043a\u0432\u043e\u0437\u044c"
@@ -217,6 +239,12 @@
     ],
     "hexhead": false,
     "span": 12.8,
+    "joins": [
+     "L_arm_cls_cable",
+     "L_arm_cover"
+    ],
+    "headPart": "L_arm_cover",
+    "nutPart": "L_arm_cls_cable",
     "need": 16.8,
     "sure": true,
     "how": "\u043d\u0430\u0441\u043a\u0432\u043e\u0437\u044c"
@@ -241,6 +269,12 @@
     ],
     "hexhead": false,
     "span": 12.5,
+    "joins": [
+     "L_arm_cls_cable",
+     "L_arm_cover"
+    ],
+    "headPart": "L_arm_cover",
+    "nutPart": "L_arm_cls_cable",
     "need": 16.5,
     "sure": true,
     "how": "\u043d\u0430\u0441\u043a\u0432\u043e\u0437\u044c"
@@ -265,6 +299,12 @@
     ],
     "hexhead": false,
     "span": 18.5,
+    "joins": [
+     "L_arm_cls_cable",
+     "L_arm_cover"
+    ],
+    "headPart": "L_arm_cls_cable",
+    "nutPart": "L_arm_cls_cable",
     "need": 21.7,
     "sure": true,
     "how": "\u043d\u0430\u0441\u043a\u0432\u043e\u0437\u044c"
@@ -291,6 +331,12 @@
     ],
     "hexhead": false,
     "span": 18.8,
+    "joins": [
+     "R_arm_cls_cable",
+     "R_arm_cover"
+    ],
+    "headPart": "R_arm_cls_cable",
+    "nutPart": "R_arm_cls_cable",
     "need": 21.9,
     "sure": true,
     "how": "\u043d\u0430\u0441\u043a\u0432\u043e\u0437\u044c"
@@ -315,6 +361,12 @@
     ],
     "hexhead": false,
     "span": 18.8,
+    "joins": [
+     "R_arm_cls_cable",
+     "R_arm_cover"
+    ],
+    "headPart": "R_arm_cls_cable",
+    "nutPart": "R_arm_cls_cable",
     "need": 21.9,
     "sure": true,
     "how": "\u043d\u0430\u0441\u043a\u0432\u043e\u0437\u044c"
@@ -339,6 +391,11 @@
     ],
     "hexhead": false,
     "span": 12.8,
+    "joins": [
+     "R_arm_cls_cable"
+    ],
+    "headPart": "R_arm_cls_cable",
+    "nutPart": "R_arm_cls_cable",
     "need": 16.8,
     "sure": true,
     "how": "\u043d\u0430\u0441\u043a\u0432\u043e\u0437\u044c"
@@ -363,6 +420,11 @@
     ],
     "hexhead": false,
     "span": 12.8,
+    "joins": [
+     "R_arm_cls_cable"
+    ],
+    "headPart": "R_arm_cls_cable",
+    "nutPart": "R_arm_cls_cable",
     "need": 16.8,
     "sure": true,
     "how": "\u043d\u0430\u0441\u043a\u0432\u043e\u0437\u044c"
@@ -387,6 +449,12 @@
     ],
     "hexhead": false,
     "span": 12.5,
+    "joins": [
+     "R_arm_cls_cable",
+     "R_arm_cover"
+    ],
+    "headPart": "R_arm_cover",
+    "nutPart": "R_arm_cls_cable",
     "need": 16.5,
     "sure": true,
     "how": "\u043d\u0430\u0441\u043a\u0432\u043e\u0437\u044c"
@@ -411,6 +479,12 @@
     ],
     "hexhead": false,
     "span": 12.2,
+    "joins": [
+     "R_arm_cls_cable",
+     "R_arm_cover"
+    ],
+    "headPart": "R_arm_cover",
+    "nutPart": "R_arm_cls_cable",
     "need": 16.2,
     "sure": true,
     "how": "\u043d\u0430\u0441\u043a\u0432\u043e\u0437\u044c"
@@ -435,6 +509,12 @@
     ],
     "hexhead": false,
     "span": 18.5,
+    "joins": [
+     "R_arm_cls_cable",
+     "R_arm_cover"
+    ],
+    "headPart": "R_arm_cls_cable",
+    "nutPart": "R_arm_cls_cable",
     "need": 21.7,
     "sure": true,
     "how": "\u043d\u0430\u0441\u043a\u0432\u043e\u0437\u044c"
@@ -461,6 +541,11 @@
     ],
     "hexhead": false,
     "span": 19.8,
+    "joins": [
+     "L_wrist_cls"
+    ],
+    "headPart": "L_wrist_cls",
+    "nutPart": "L_wrist_cls",
     "need": 23.8,
     "sure": true,
     "how": "\u043d\u0430\u0441\u043a\u0432\u043e\u0437\u044c"
@@ -485,6 +570,11 @@
     ],
     "hexhead": false,
     "span": 19.8,
+    "joins": [
+     "L_wrist_cls"
+    ],
+    "headPart": "L_wrist_cls",
+    "nutPart": "L_wrist_cls",
     "need": 23.8,
     "sure": true,
     "how": "\u043d\u0430\u0441\u043a\u0432\u043e\u0437\u044c"
@@ -509,6 +599,11 @@
     ],
     "hexhead": false,
     "span": 14.8,
+    "joins": [
+     "L_wrist_cls"
+    ],
+    "headPart": "L_wrist_cls",
+    "nutPart": "L_wrist_cls",
     "need": 18.8,
     "sure": true,
     "how": "\u043d\u0430\u0441\u043a\u0432\u043e\u0437\u044c"
@@ -533,6 +628,11 @@
     ],
     "hexhead": false,
     "span": 14.8,
+    "joins": [
+     "L_wrist_cls"
+    ],
+    "headPart": "L_wrist_cls",
+    "nutPart": "L_wrist_cls",
     "need": 18.8,
     "sure": true,
     "how": "\u043d\u0430\u0441\u043a\u0432\u043e\u0437\u044c"
@@ -559,6 +659,11 @@
     ],
     "hexhead": false,
     "span": 19.8,
+    "joins": [
+     "R_wrist_cls"
+    ],
+    "headPart": "R_wrist_cls",
+    "nutPart": "R_wrist_cls",
     "need": 23.8,
     "sure": true,
     "how": "\u043d\u0430\u0441\u043a\u0432\u043e\u0437\u044c"
@@ -583,6 +688,11 @@
     ],
     "hexhead": false,
     "span": 14.8,
+    "joins": [
+     "R_wrist_cls"
+    ],
+    "headPart": "R_wrist_cls",
+    "nutPart": "R_wrist_cls",
     "need": 18.8,
     "sure": true,
     "how": "\u043d\u0430\u0441\u043a\u0432\u043e\u0437\u044c"
@@ -607,6 +717,11 @@
     ],
     "hexhead": false,
     "span": 19.8,
+    "joins": [
+     "R_wrist_cls"
+    ],
+    "headPart": "R_wrist_cls",
+    "nutPart": "R_wrist_cls",
     "need": 23.8,
     "sure": true,
     "how": "\u043d\u0430\u0441\u043a\u0432\u043e\u0437\u044c"
@@ -631,6 +746,11 @@
     ],
     "hexhead": false,
     "span": 14.8,
+    "joins": [
+     "R_wrist_cls"
+    ],
+    "headPart": "R_wrist_cls",
+    "nutPart": "R_wrist_cls",
     "need": 18.8,
     "sure": true,
     "how": "\u043d\u0430\u0441\u043a\u0432\u043e\u0437\u044c"
@@ -657,6 +777,11 @@
     ],
     "hexhead": false,
     "span": 14.8,
+    "joins": [
+     "L_arm_joint_cls"
+    ],
+    "headPart": "L_arm_joint_cls",
+    "nutPart": "L_arm_joint_cls",
     "need": 18.8,
     "sure": true,
     "how": "\u043d\u0430\u0441\u043a\u0432\u043e\u0437\u044c"
@@ -681,6 +806,11 @@
     ],
     "hexhead": false,
     "span": 14.8,
+    "joins": [
+     "L_arm_joint_cls"
+    ],
+    "headPart": "L_arm_joint_cls",
+    "nutPart": "L_arm_joint_cls",
     "need": 18.8,
     "sure": true,
     "how": "\u043d\u0430\u0441\u043a\u0432\u043e\u0437\u044c"
@@ -705,6 +835,11 @@
     ],
     "hexhead": false,
     "span": 14.8,
+    "joins": [
+     "L_arm_joint_cls"
+    ],
+    "headPart": "L_arm_joint_cls",
+    "nutPart": "L_arm_joint_cls",
     "need": 18.8,
     "sure": true,
     "how": "\u043d\u0430\u0441\u043a\u0432\u043e\u0437\u044c"
@@ -729,6 +864,11 @@
     ],
     "hexhead": false,
     "span": 14.8,
+    "joins": [
+     "L_arm_joint_cls"
+    ],
+    "headPart": "L_arm_joint_cls",
+    "nutPart": "L_arm_joint_cls",
     "need": 18.8,
     "sure": true,
     "how": "\u043d\u0430\u0441\u043a\u0432\u043e\u0437\u044c"
@@ -755,6 +895,11 @@
     ],
     "hexhead": false,
     "span": 14.8,
+    "joins": [
+     "R_arm_joint_cls"
+    ],
+    "headPart": "R_arm_joint_cls",
+    "nutPart": "R_arm_joint_cls",
     "need": 18.8,
     "sure": true,
     "how": "\u043d\u0430\u0441\u043a\u0432\u043e\u0437\u044c"
@@ -779,6 +924,11 @@
     ],
     "hexhead": false,
     "span": 14.8,
+    "joins": [
+     "R_arm_joint_cls"
+    ],
+    "headPart": "R_arm_joint_cls",
+    "nutPart": "R_arm_joint_cls",
     "need": 18.8,
     "sure": true,
     "how": "\u043d\u0430\u0441\u043a\u0432\u043e\u0437\u044c"
@@ -803,6 +953,11 @@
     ],
     "hexhead": false,
     "span": 14.8,
+    "joins": [
+     "R_arm_joint_cls"
+    ],
+    "headPart": "R_arm_joint_cls",
+    "nutPart": "R_arm_joint_cls",
     "need": 18.8,
     "sure": true,
     "how": "\u043d\u0430\u0441\u043a\u0432\u043e\u0437\u044c"
@@ -827,6 +982,11 @@
     ],
     "hexhead": false,
     "span": 14.8,
+    "joins": [
+     "R_arm_joint_cls"
+    ],
+    "headPart": "R_arm_joint_cls",
+    "nutPart": "R_arm_joint_cls",
     "need": 18.8,
     "sure": true,
     "how": "\u043d\u0430\u0441\u043a\u0432\u043e\u0437\u044c"
@@ -853,6 +1013,13 @@
     ],
     "hexhead": false,
     "span": 23.5,
+    "joins": [
+     "I_shoulder_cls",
+     "R_side_plate",
+     "plate_plain"
+    ],
+    "headPart": "R_side_plate",
+    "nutPart": "I_shoulder_cls",
     "need": 17.0,
     "sure": true,
     "how": "\u0433\u0430\u0439\u043a\u0430 \u0432 \u043f\u0440\u043e\u0440\u0435\u0437\u0438 3.2 \u043c\u043c"
@@ -877,6 +1044,12 @@
     ],
     "hexhead": false,
     "span": 1.8,
+    "joins": [
+     "I_shoulder_cls",
+     "R_side_plate"
+    ],
+    "headPart": "I_shoulder_cls",
+    "nutPart": "I_shoulder_cls",
     "need": 12.0,
     "sure": true,
     "how": "\u0433\u0430\u0439\u043a\u0430 \u0432 \u043f\u0440\u043e\u0440\u0435\u0437\u0438 3.2 \u043c\u043c"
@@ -901,6 +1074,13 @@
     ],
     "hexhead": false,
     "span": 22.8,
+    "joins": [
+     "I_shoulder_cls",
+     "non-mega_L_side_plate",
+     "plate_plain"
+    ],
+    "headPart": "non-mega_L_side_plate",
+    "nutPart": "I_shoulder_cls",
     "need": 17.0,
     "sure": true,
     "how": "\u0433\u0430\u0439\u043a\u0430 \u0432 \u043f\u0440\u043e\u0440\u0435\u0437\u0438 3.2 \u043c\u043c"
@@ -925,6 +1105,12 @@
     ],
     "hexhead": false,
     "span": 18.8,
+    "joins": [
+     "I_shoulder_cls",
+     "non-mega_L_side_plate"
+    ],
+    "headPart": "non-mega_L_side_plate",
+    "nutPart": "I_shoulder_cls",
     "need": 12.0,
     "sure": true,
     "how": "\u0433\u0430\u0439\u043a\u0430 \u0432 \u043f\u0440\u043e\u0440\u0435\u0437\u0438 3.2 \u043c\u043c"
@@ -949,6 +1135,12 @@
     ],
     "hexhead": false,
     "span": 18.2,
+    "joins": [
+     "I_shoulder_cls",
+     "R_side_plate"
+    ],
+    "headPart": "R_side_plate",
+    "nutPart": "I_shoulder_cls",
     "need": 12.0,
     "sure": true,
     "how": "\u0433\u0430\u0439\u043a\u0430 \u0432 \u043f\u0440\u043e\u0440\u0435\u0437\u0438 3.2 \u043c\u043c"
@@ -973,6 +1165,12 @@
     ],
     "hexhead": false,
     "span": 18.0,
+    "joins": [
+     "I_shoulder_cls",
+     "R_side_plate"
+    ],
+    "headPart": "R_side_plate",
+    "nutPart": "I_shoulder_cls",
     "need": 12.0,
     "sure": true,
     "how": "\u0433\u0430\u0439\u043a\u0430 \u0432 \u043f\u0440\u043e\u0440\u0435\u0437\u0438 3.2 \u043c\u043c"
@@ -997,6 +1195,12 @@
     ],
     "hexhead": false,
     "span": 17.5,
+    "joins": [
+     "I_shoulder_cls",
+     "non-mega_L_side_plate"
+    ],
+    "headPart": "non-mega_L_side_plate",
+    "nutPart": "I_shoulder_cls",
     "need": 12.0,
     "sure": true,
     "how": "\u0433\u0430\u0439\u043a\u0430 \u0432 \u043f\u0440\u043e\u0440\u0435\u0437\u0438 3.2 \u043c\u043c"
@@ -1021,6 +1225,12 @@
     ],
     "hexhead": false,
     "span": 18.8,
+    "joins": [
+     "I_shoulder_cls",
+     "non-mega_L_side_plate"
+    ],
+    "headPart": "non-mega_L_side_plate",
+    "nutPart": "I_shoulder_cls",
     "need": 12.0,
     "sure": true,
     "how": "\u0433\u0430\u0439\u043a\u0430 \u0432 \u043f\u0440\u043e\u0440\u0435\u0437\u0438 3.2 \u043c\u043c"
@@ -1045,6 +1255,12 @@
     ],
     "hexhead": false,
     "span": 27.5,
+    "joins": [
+     "I_shoulder_cls",
+     "O_shoulder"
+    ],
+    "headPart": "I_shoulder_cls",
+    "nutPart": "O_shoulder",
     "need": 22.2,
     "sure": true,
     "how": "\u0433\u0430\u0439\u043a\u0430 \u0432 \u043f\u0440\u043e\u0440\u0435\u0437\u0438 3.2 \u043c\u043c"
@@ -1069,6 +1285,12 @@
     ],
     "hexhead": false,
     "span": 27.8,
+    "joins": [
+     "I_shoulder_cls",
+     "O_shoulder"
+    ],
+    "headPart": "I_shoulder_cls",
+    "nutPart": "O_shoulder",
     "need": 22.5,
     "sure": true,
     "how": "\u0433\u0430\u0439\u043a\u0430 \u0432 \u043f\u0440\u043e\u0440\u0435\u0437\u0438 3.2 \u043c\u043c"
@@ -1093,6 +1315,12 @@
     ],
     "hexhead": false,
     "span": 27.5,
+    "joins": [
+     "I_shoulder_cls",
+     "O_shoulder"
+    ],
+    "headPart": "I_shoulder_cls",
+    "nutPart": "O_shoulder",
     "need": 22.2,
     "sure": true,
     "how": "\u0433\u0430\u0439\u043a\u0430 \u0432 \u043f\u0440\u043e\u0440\u0435\u0437\u0438 3.2 \u043c\u043c"
@@ -1117,6 +1345,12 @@
     ],
     "hexhead": false,
     "span": 27.8,
+    "joins": [
+     "I_shoulder_cls",
+     "O_shoulder"
+    ],
+    "headPart": "I_shoulder_cls",
+    "nutPart": "O_shoulder",
     "need": 22.5,
     "sure": true,
     "how": "\u0433\u0430\u0439\u043a\u0430 \u0432 \u043f\u0440\u043e\u0440\u0435\u0437\u0438 3.2 \u043c\u043c"
@@ -1141,6 +1375,12 @@
     ],
     "hexhead": false,
     "span": 27.5,
+    "joins": [
+     "I_shoulder_cls",
+     "O_shoulder"
+    ],
+    "headPart": "I_shoulder_cls",
+    "nutPart": "O_shoulder",
     "need": 22.5,
     "sure": true,
     "how": "\u0433\u0430\u0439\u043a\u0430 \u0432 \u043f\u0440\u043e\u0440\u0435\u0437\u0438 3.2 \u043c\u043c"
@@ -1165,6 +1405,12 @@
     ],
     "hexhead": false,
     "span": 27.8,
+    "joins": [
+     "I_shoulder_cls",
+     "O_shoulder"
+    ],
+    "headPart": "O_shoulder",
+    "nutPart": "I_shoulder_cls",
     "need": 26.5,
     "sure": true,
     "how": "\u0433\u0430\u0439\u043a\u0430 \u0432 \u043f\u0440\u043e\u0440\u0435\u0437\u0438 3.2 \u043c\u043c"
@@ -1189,6 +1435,12 @@
     ],
     "hexhead": false,
     "span": 27.5,
+    "joins": [
+     "I_shoulder_cls",
+     "O_shoulder"
+    ],
+    "headPart": "O_shoulder",
+    "nutPart": "I_shoulder_cls",
     "need": 26.2,
     "sure": false,
     "how": "\u0433\u0430\u0439\u043a\u0430 \u0432 \u043f\u0440\u043e\u0440\u0435\u0437\u0438 3.2 \u043c\u043c"
@@ -1213,6 +1465,12 @@
     ],
     "hexhead": false,
     "span": 27.8,
+    "joins": [
+     "I_shoulder_cls",
+     "O_shoulder"
+    ],
+    "headPart": "I_shoulder_cls",
+    "nutPart": "O_shoulder",
     "need": 22.5,
     "sure": true,
     "how": "\u0433\u0430\u0439\u043a\u0430 \u0432 \u043f\u0440\u043e\u0440\u0435\u0437\u0438 3.2 \u043c\u043c"
@@ -1237,6 +1495,13 @@
     ],
     "hexhead": false,
     "span": 8.2,
+    "joins": [
+     "I_shoulder_cls",
+     "R_cover",
+     "non-mega_T_cover_cls"
+    ],
+    "headPart": "non-mega_T_cover_cls",
+    "nutPart": "I_shoulder_cls",
     "need": 13.1,
     "sure": true,
     "how": "\u043d\u0430\u0441\u043a\u0432\u043e\u0437\u044c"
@@ -1261,6 +1526,13 @@
     ],
     "hexhead": false,
     "span": 8.2,
+    "joins": [
+     "I_shoulder_cls",
+     "R_cover",
+     "non-mega_T_cover_cls"
+    ],
+    "headPart": "non-mega_T_cover_cls",
+    "nutPart": "I_shoulder_cls",
     "need": 13.1,
     "sure": true,
     "how": "\u043d\u0430\u0441\u043a\u0432\u043e\u0437\u044c"
@@ -1285,6 +1557,13 @@
     ],
     "hexhead": false,
     "span": 9.2,
+    "joins": [
+     "I_shoulder_cls",
+     "R_cover",
+     "non-mega_B_cover_cls"
+    ],
+    "headPart": "non-mega_B_cover_cls",
+    "nutPart": "I_shoulder_cls",
     "need": 14.1,
     "sure": true,
     "how": "\u043d\u0430\u0441\u043a\u0432\u043e\u0437\u044c"
@@ -1309,6 +1588,13 @@
     ],
     "hexhead": false,
     "span": 9.2,
+    "joins": [
+     "I_shoulder_cls",
+     "R_cover",
+     "non-mega_B_cover_cls"
+    ],
+    "headPart": "non-mega_B_cover_cls",
+    "nutPart": "I_shoulder_cls",
     "need": 14.1,
     "sure": true,
     "how": "\u043d\u0430\u0441\u043a\u0432\u043e\u0437\u044c"
@@ -1333,6 +1619,13 @@
     ],
     "hexhead": false,
     "span": 6.8,
+    "joins": [
+     "F_cover",
+     "I_shoulder_cls",
+     "non-mega_T_cover_cls"
+    ],
+    "headPart": "F_cover",
+    "nutPart": "I_shoulder_cls",
     "need": 11.6,
     "sure": true,
     "how": "\u043d\u0430\u0441\u043a\u0432\u043e\u0437\u044c"
@@ -1357,6 +1650,13 @@
     ],
     "hexhead": false,
     "span": 6.8,
+    "joins": [
+     "F_cover",
+     "I_shoulder_cls",
+     "non-mega_T_cover_cls"
+    ],
+    "headPart": "F_cover",
+    "nutPart": "I_shoulder_cls",
     "need": 11.6,
     "sure": true,
     "how": "\u043d\u0430\u0441\u043a\u0432\u043e\u0437\u044c"
@@ -1381,6 +1681,12 @@
     ],
     "hexhead": false,
     "span": 6.8,
+    "joins": [
+     "F_cover",
+     "I_shoulder_cls"
+    ],
+    "headPart": "F_cover",
+    "nutPart": "I_shoulder_cls",
     "need": 11.6,
     "sure": true,
     "how": "\u043d\u0430\u0441\u043a\u0432\u043e\u0437\u044c"
@@ -1405,6 +1711,12 @@
     ],
     "hexhead": false,
     "span": 6.8,
+    "joins": [
+     "F_cover",
+     "I_shoulder_cls"
+    ],
+    "headPart": "F_cover",
+    "nutPart": "I_shoulder_cls",
     "need": 11.6,
     "sure": true,
     "how": "\u043d\u0430\u0441\u043a\u0432\u043e\u0437\u044c"
@@ -1429,6 +1741,12 @@
     ],
     "hexhead": false,
     "span": 27.5,
+    "joins": [
+     "I_shoulder_cls",
+     "O_shoulder"
+    ],
+    "headPart": "O_shoulder",
+    "nutPart": "I_shoulder_cls",
     "need": 26.2,
     "sure": true,
     "how": "\u0433\u0430\u0439\u043a\u0430 \u0432 \u043f\u0440\u043e\u0440\u0435\u0437\u0438 3.2 \u043c\u043c"
@@ -1453,6 +1771,12 @@
     ],
     "hexhead": false,
     "span": 27.5,
+    "joins": [
+     "I_shoulder_cls",
+     "O_shoulder"
+    ],
+    "headPart": "I_shoulder_cls",
+    "nutPart": "O_shoulder",
     "need": 22.5,
     "sure": true,
     "how": "\u0433\u0430\u0439\u043a\u0430 \u0432 \u043f\u0440\u043e\u0440\u0435\u0437\u0438 3.2 \u043c\u043c"
@@ -1477,6 +1801,12 @@
     ],
     "hexhead": false,
     "span": 27.8,
+    "joins": [
+     "I_shoulder_cls",
+     "O_shoulder"
+    ],
+    "headPart": "I_shoulder_cls",
+    "nutPart": "O_shoulder",
     "need": 22.5,
     "sure": true,
     "how": "\u0433\u0430\u0439\u043a\u0430 \u0432 \u043f\u0440\u043e\u0440\u0435\u0437\u0438 3.2 \u043c\u043c"
@@ -1501,6 +1831,12 @@
     ],
     "hexhead": false,
     "span": 27.8,
+    "joins": [
+     "I_shoulder_cls",
+     "O_shoulder"
+    ],
+    "headPart": "I_shoulder_cls",
+    "nutPart": "O_shoulder",
     "need": 22.5,
     "sure": true,
     "how": "\u0433\u0430\u0439\u043a\u0430 \u0432 \u043f\u0440\u043e\u0440\u0435\u0437\u0438 3.2 \u043c\u043c"
@@ -1525,6 +1861,13 @@
     ],
     "hexhead": false,
     "span": 23.2,
+    "joins": [
+     "I_shoulder_cls",
+     "R_side_plate",
+     "plate_plain"
+    ],
+    "headPart": "R_side_plate",
+    "nutPart": "I_shoulder_cls",
     "need": 17.0,
     "sure": true,
     "how": "\u0433\u0430\u0439\u043a\u0430 \u0432 \u043f\u0440\u043e\u0440\u0435\u0437\u0438 3.2 \u043c\u043c"
@@ -1549,6 +1892,12 @@
     ],
     "hexhead": false,
     "span": 18.0,
+    "joins": [
+     "I_shoulder_cls",
+     "R_side_plate"
+    ],
+    "headPart": "R_side_plate",
+    "nutPart": "I_shoulder_cls",
     "need": 12.0,
     "sure": true,
     "how": "\u0433\u0430\u0439\u043a\u0430 \u0432 \u043f\u0440\u043e\u0440\u0435\u0437\u0438 3.2 \u043c\u043c"
@@ -1573,6 +1922,12 @@
     ],
     "hexhead": false,
     "span": 18.2,
+    "joins": [
+     "I_shoulder_cls",
+     "R_side_plate"
+    ],
+    "headPart": "R_side_plate",
+    "nutPart": "I_shoulder_cls",
     "need": 12.0,
     "sure": true,
     "how": "\u0433\u0430\u0439\u043a\u0430 \u0432 \u043f\u0440\u043e\u0440\u0435\u0437\u0438 3.2 \u043c\u043c"
@@ -1597,6 +1952,12 @@
     ],
     "hexhead": false,
     "span": 18.0,
+    "joins": [
+     "I_shoulder_cls",
+     "R_side_plate"
+    ],
+    "headPart": "R_side_plate",
+    "nutPart": "I_shoulder_cls",
     "need": 12.0,
     "sure": true,
     "how": "\u0433\u0430\u0439\u043a\u0430 \u0432 \u043f\u0440\u043e\u0440\u0435\u0437\u0438 3.2 \u043c\u043c"
