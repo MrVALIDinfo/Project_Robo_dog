@@ -6,6 +6,7 @@ import URDFLoader from './lib/URDFLoader.js';
 import { bodyTriangles, obbOf, obbVsBody, obbObb, segVsBody, insideBody } from './check.js';
 import { createExplode } from './explode.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
 
 const view = document.getElementById('view');
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -128,6 +129,25 @@ function group(parent, pos = [0, 0, 0]) { const g = new THREE.Group(); g.positio
 
 // ---- серво PDI-HV5523MG: 40.5 x 20.2 x 38 мм, ушки 54.5 мм, вал 25T на 10.1 мм от торца ----
 // начало координат — ось вала на верхней крышке корпуса, вал +Z, корпус вниз, длинная сторона по X (корпус в сторону -X)
+// раскраска модели Pi по зонам платы (мм, система платы: угол (0,0), низ платы z = 0, верх 1.4)
+function colorPi(g) {
+  const P = g.attributes.position, C = new Float32Array(P.count * 3), c = new THREE.Color();
+  const inb = (x, y, a, b, cc, d) => x >= a && x <= b && y >= cc && y <= d;
+  for (let f = 0; f < P.count; f += 3) {
+    let x = 0, y = 0, z = 0;
+    for (let k = 0; k < 3; k++) { x += P.getX(f + k) * 333.333; y += P.getY(f + k) * 333.333; z += P.getZ(f + k) * 333.333; }
+    let col = 0x2b2d31;                                                   // мелкие компоненты
+    if (z > -0.05 && z < 1.45) col = 0x1f7a45;                           // плата
+    else if (inb(x, y, 64, 90, -2, 54) && z > 1.4) col = 0xc3c7cd;      // USB и Ethernet
+    else if (inb(x, y, 23, 41, -2, 11) && z > 1.4) col = 0xbfc3c9;      // HDMI
+    else if (inb(x, y, 5, 16, -2, 5) && z > 1.4) col = 0xbfc3c9;        // micro-USB
+    else if (inb(x, y, 6, 59, 49.5, 56) && z > 1.4) col = z > 3.9 ? 0xd4af37 : 0x141518;   // гребёнка GPIO: пины и колодка
+    else if ((inb(x, y, 34, 56, 11, 19) || inb(x, y, 0.5, 7.5, 16, 40)) && z > 1.4) col = 0xe6e1d3;   // разъёмы камеры и дисплея
+    else if (z < -0.05 && inb(x, y, -3, 15, 19, 37)) col = 0xbfc3c9;    // слот microSD
+    c.setHex(col); for (let k = 0; k < 3; k++) { C[3 * (f + k)] = c.r; C[3 * (f + k) + 1] = c.g; C[3 * (f + k) + 2] = c.b; }
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(C, 3));
+}
 function makeServo(name, part) {
   const g = new THREE.Group();
   const dark = new THREE.MeshStandardMaterial({ color: 0x23262d, roughness: .6, metalness: .1 });
@@ -242,6 +262,15 @@ function addElectronics() {
   bx(pi, `${PI}: процессор BCM2837`, 'pi', [22, 25, 1.4], [36, 39, 2.6], 0x55585e, { edges: false });
   bx(pi, `${PI}: слот microSD`, 'pi', [0.5, 20.5, -1.5], [14, 35.5, 0], silver, { metal: .7 });
   bx(pi, 'microSD 16–32 ГБ', 'pi', [-2.5, 22, -1.2], [12, 33, -0.4], 0x2b2f8f, { cat: 'sd' });
+  // настоящая модель Pi 3 B (Thingiverse 1701186, CC BY-SA) поверх габаритных коробок; коробки остаются для проверки стыковки, но не видны
+  pi.traverse(o => { if (o.isMesh && o.userData.cat !== 'sd') { o.visible = false; o.children.forEach(c => c.visible = false); o.userData.hiddenProxy = true; } });
+  pending++;
+  stlLoader.load('parts/rpi3.stl', g => {
+    g.scale(0.001, 0.001, 0.001); colorPi(g);
+    const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .5, metalness: .25 }));
+    Object.assign(m.userData, { nocheck: true }); pi.add(m); tagPart(m, PI, 'pi');
+    if (!--pending) onPartsLoaded();
+  });
   platform('raspberry_pi_platform.stl', 'Площадка Raspberry Pi (печать, mike4192 thing:4596267) на двустороннем скотче, Pi — саморезы/M2.5', [PI0[0], PI0[1] + 56, -7.05], 'piplat');
 
   // --- PCA9685 + конденсатор 2200 мкФ 16 В на клеммнике V+ ---
@@ -810,7 +839,7 @@ let showOpt = true;
 const optVisible = m => !m.userData.opt || showOpt;
 btn('cShell').onchange = e => shell.forEach(m => m.visible = e.target.checked);
 btn('sGhost').oninput = e => { const v = +e.target.value / 100; btn('vGhost').textContent = Math.round(v * 100) + '%'; shell.forEach(m => { m.material.transparent = v > 0.01; m.material.opacity = 1 - v * 0.92; m.material.depthWrite = v < 0.35; m.material.needsUpdate = true; }); };
-btn('cElec').onchange = e => pick.forEach(m => { if (m.userData.cat !== 'logo') m.visible = e.target.checked && optVisible(m); });
+btn('cElec').onchange = e => pick.forEach(m => { if (m.userData.cat !== 'logo' && !m.userData.hiddenProxy) m.visible = e.target.checked && optVisible(m); });
 btn('cOpt').onchange = e => { showOpt = e.target.checked; pick.forEach(m => { if (m.userData.opt) m.visible = showOpt && btn('cElec').checked; }); if (report) runCheck(); };
 btn('cFov').onchange = e => { if (fovLines) fovLines.visible = e.target.checked; };
 btn('cLogo').onchange = e => { if (logoGroup) logoGroup.visible = e.target.checked; };
@@ -830,6 +859,7 @@ renderer.domElement.addEventListener('pointermove', ev => {
 function applyQuery() {
   const q = new URLSearchParams(location.search);
   if (q.has('record')) { recordVideo(+q.get('record') || 1); return; }
+  if (q.has('exportglb')) { exportGLB(+q.get('exportglb') || 1); return; }
   if (q.has('explode')) { stopAnim(); setBtn('bStand'); applyPose(POSES.stand); groundY = rig.position.y; presentation(); if (q.get('explode') === 'open') setTimeout(explodeOpen, 300); if (q.get('at')) ex.seek(+q.get('at')).then(() => flyExploded(0.01)); }
   if (q.get('nologo') && logoGroup) logoGroup.visible = false;
   if (q.get('ghost')) { btn('sGhost').value = 75; btn('sGhost').oninput({ target: btn('sGhost') }); }
@@ -929,6 +959,29 @@ async function recordVideo(speed) {
   }
   await fetch('http://localhost:8771/done', { method: 'POST', body: '' });
   document.title = 'RECORD_DONE';
+}
+// ---- экспорт сцены с анимацией разборки/сборки в GLB для рендера в Blender (tools/explode/blender_render.py) ----
+async function exportGLB(speed) {
+  presentation(); document.getElementById('exBar')?.remove();
+  stopAnim(); applyPose(POSES.stand); tuneMaterials(); await ex.prepare();
+  renderer.setAnimationLoop(null);
+  const FPS = 30, T = ex.T / speed, holdA = 1.0, holdB = 2.6, total = holdA + T + holdB + T + 1.2, N = Math.round(total * FPS);
+  const times = Array.from({ length: N }, (_, i) => i / FPS);
+  let fl = 0;
+  ex.frameAt(0, 0, 0);
+  const clip = ex.animClip(times, (i, s) => {
+    let tt;
+    if (s < holdA) tt = 0; else if (s < holdA + T) tt = (s - holdA) * speed; else if (s < holdA + T + holdB) tt = ex.T; else tt = Math.max(0, ex.T - (s - holdA - T - holdB) * speed);
+    fl = (s >= holdA + T && s < holdA + T + holdB) ? Math.min(1, fl + 0.5 / FPS) : Math.max(0, fl - 2 / FPS);
+    ex.frameAt(tt, s, fl);
+  });
+  ex.frameAt(0, 0, 0);
+  rig.traverse(o => { if (o.isLine || o.isLineSegments || o.isPoints) o.visible = false; });
+  if (fovLines) fovLines.visible = false;
+  const glb = await new GLTFExporter().parseAsync(rig, { binary: true, animations: [clip], onlyVisible: true, trs: true });
+  await fetch('http://localhost:8771/frame?i=0', { method: 'POST', body: new Blob([glb]) });
+  await fetch('http://localhost:8771/done', { method: 'POST', body: JSON.stringify({ frames: N, fps: FPS, phases: { holdA, T, holdB } }) });
+  document.title = 'EXPORT_DONE';
 }
 function assembledFrame() {       // центр и расстояние под собранную собаку — по её габаритам
   const b = new THREE.Box3(); rig.updateMatrixWorld(true);

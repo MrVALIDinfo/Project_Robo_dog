@@ -349,6 +349,19 @@ export function createExplode(ctx) {
     async close() { await prepare(); if (!swapped) return; dir = -1; ctx.onState?.('closing'); },
     frameAt(tt, clk, fl) { setParts(true); t = Math.max(0, Math.min(T, tt)); clock = clk; floatT = fl; apply(); updateLabels(); return lastLabels; },
     get T() { return T; }, setAssembled() { t = 0; apply(); setParts(false); },
+    // анимация для экспорта в GLB (рендер в Blender): позиции всех движущихся объектов и вращение болтов по кадрам
+    animClip(times, sample) {
+      const objs = [], spins = [];
+      units.forEach(u => {
+        u.objs.forEach(it => { if (!it.o.matrixAutoUpdate) { it.o.matrix.decompose(it.o.position, it.o.quaternion, it.o.scale); it.o.matrixAutoUpdate = true; } it.b = it.o.position.clone(); objs.push(it.o); });
+        if (u.spin) spins.push(u.spin.o);
+      });
+      [...objs, ...spins].forEach((o, i) => { o.name = `ex${i}`; });
+      const P = objs.map(() => []), Q = spins.map(() => []);
+      times.forEach((tm, k) => { sample(k, tm); objs.forEach((o, i) => P[i].push(o.position.x, o.position.y, o.position.z)); spins.forEach((o, i) => Q[i].push(o.quaternion.x, o.quaternion.y, o.quaternion.z, o.quaternion.w)); });
+      const tracks = [...objs.map((o, i) => new THREE.VectorKeyframeTrack(`${o.name}.position`, times, P[i])), ...spins.map((o, i) => new THREE.QuaternionKeyframeTrack(`${o.name}.quaternion`, times, Q[i]))];
+      return new THREE.AnimationClip('explode', times[times.length - 1], tracks);
+    },
     async seek(f) { await prepare(); setParts(true); t = f * T; dir = 0; apply(); updateLabels(); ctx.onState?.(f >= 1 ? 'exploded' : 'opening'); },
     explodedBounds() { return explodedBounds(); },
     setSpeed(s) { speed = s; }, labelsOn(v) { ctx.labels = v; }, update, prepare,
