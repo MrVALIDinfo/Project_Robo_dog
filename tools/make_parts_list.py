@@ -50,14 +50,16 @@ SECTIONS = [
         ('ADS1115 ADC', '1', ''),
         ('Resistors 20 kOhm + 10 kOhm', '1 + 1', 'Divider: 8.4 V -> 2.8 V'),
     ]),
-    ('6. Fasteners & bearings', [
-        ('Bolt M5x15', '8', ''),
-        ('Bolt M4x20', '40', ''),
-        ('Bolt M4x15', '8', ''),
+    ('6. Fasteners & bearings (lengths measured on our _cls parts)', [
+        ('Bolt M5x15', '8', 'Covers to shoulder bulkheads'),
+        ('Nut M5', '8', 'Hex pockets in bulkheads (not in KDY BOM)'),
+        ('Bolt M4x20', '40', 'Servo mounting: shoulder, hip, knee'),
+        ('Bolt M4x25', '8', 'Knee servo, 20 mm holes in the _cls shin'),
         ('Nut M4', '48', ''),
-        ('Bolt M3x20', '4', ''),
-        ('Bolt M3x10', '36', 'Frame 28 + shoulder reinforcement 8'),
-        ('Nut M3', '24', 'Frame 16 + shoulder reinforcement 8'),
+        ('Bolt M3x25', '24', 'Bulkheads (12); thigh + cover (12, check at assembly)'),
+        ('Bolt M3x20', '12', 'Side plates to bulkheads'),
+        ('Nut M3', '36', 'In nut slots'),
+        ('Bolt M3x10 + nut M3', '8 + 8', 'mike4192 shoulder reinforcement'),
         ('Bearing F625zz', '12', 'Frame 8 + shoulder reinforcement 4'),
         ('Screw M2x6 + nut M2', '4 + 4', 'Camera mount'),
     ]),
@@ -71,12 +73,12 @@ SECTIONS = [
 
 out = os.path.join(os.path.dirname(__file__), '..', 'docs', 'parts_list_final.pdf')
 doc = SimpleDocTemplate(out, pagesize=A4, leftMargin=14 * mm, rightMargin=14 * mm,
-                        topMargin=7 * mm, bottomMargin=6 * mm,
+                        topMargin=6 * mm, bottomMargin=5 * mm,
                         title='Spot Micro - final parts list', author='Project_Robo_dog')
 H = ParagraphStyle('h', fontName='DVB', fontSize=15, leading=19)
 S = ParagraphStyle('s', fontName='DV', fontSize=8.5, leading=11, textColor=colors.HexColor('#555555'))
 SEC = ParagraphStyle('sec', fontName='DVB', fontSize=10, leading=12, spaceBefore=3, spaceAfter=1)
-C = ParagraphStyle('c', fontName='DV', fontSize=8, leading=9.6)
+C = ParagraphStyle('c', fontName='DV', fontSize=7.6, leading=9)
 
 story = [Paragraph('Spot Micro - final parts list', H),
          Paragraph('31 Oct 2026. Replaces the 23 Oct list. Checked against the KDY0523 _cls frame in the 3D model. '

@@ -6,6 +6,7 @@
    шестигранные/прямоугольные гнёзда под гайки, зенковки под головки) и ставит по ним болты и гайки.
    -> 3d-viewer/parts/explode.json
 Запуск из корня репозитория: python tools/explode/make_explode.py   (нужен tools/kdy/fit.json)
+Потом длины болтов по геометрии сборки: python tools/explode/check_fasteners.py --apply
 """
 import json, os
 import numpy as np, trimesh, shapely.geometry as G
