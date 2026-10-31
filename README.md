@@ -1,5 +1,3 @@
-Робособака на базе [Spot Micro](https://github.com/mike4192/spotMicro). Версия 2.7 ([изменения](CHANGELOG.md)).
-
 - `3d-viewer/` — 3D-модель в браузере: `cd 3d-viewer && ./start.sh`
 - `docs/parts_list_final.pdf` — что купить и схема подключения
 - `print/` — что печатать
