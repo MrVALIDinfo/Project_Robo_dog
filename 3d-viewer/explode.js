@@ -9,14 +9,15 @@ const clamp01 = t => Math.max(0, Math.min(1, t));
 
 // направления разлёта в системе base_link (мм): X вперёд, Y влево, Z вверх
 const BODY = {
-  'non-mega_T_cover_cls': [[0, 0, 150], 1.0, 2.4, 'Верхняя крышка'],
-  'non-mega_B_cover_cls': [[0, 0, -150], 1.0, 2.4, 'Нижняя крышка'],
-  'F_cover': [[175, 0, 0], 1.1, 2.5, 'Морда'],
-  'R_cover': [[-175, 0, 0], 1.1, 2.5, 'Задняя крышка ALA-TOO'],
-  'non-mega_L_side_plate': [[0, 125, 0], 1.3, 2.7, null],
-  'R_side_plate': [[0, -125, 0], 1.3, 2.7, 'Боковина'],
-  'I_shoulder_cls': [[40, 0, 0], 2.5, 3.9, 'Переборка плеч'],
-  'O_shoulder': [[95, 0, 0], 2.4, 3.8, null],
+  // порядок как при настоящей разборке: болты крышек -> крышки -> ноги -> внутренние болты и болты ног -> боковины, переборки, электроника, детали ног
+  'non-mega_T_cover_cls': [[0, 0, 150], 1.0, 2.3, 'Верхняя крышка'],
+  'non-mega_B_cover_cls': [[0, 0, -150], 1.0, 2.3, 'Нижняя крышка'],
+  'F_cover': [[175, 0, 0], 1.1, 2.4, 'Морда'],
+  'R_cover': [[-175, 0, 0], 1.1, 2.4, 'Задняя крышка ALA-TOO'],
+  'non-mega_L_side_plate': [[0, 125, 0], 4.4, 5.6, null],
+  'R_side_plate': [[0, -125, 0], 4.4, 5.6, 'Боковина'],
+  'I_shoulder_cls': [[40, 0, 0], 4.6, 5.8, 'Переборка плеч'],
+  'O_shoulder': [[95, 0, 0], 4.5, 5.7, null],
   'plate_plain': [[0, 0, 0], 0, 0, 'Плита электроники'],
 };
 const ATT = {     // детали внутри корпуса по userData.part
@@ -41,7 +42,8 @@ export function createExplode(ctx) {
   const units = [];            // { objs:[{o, dl:Vector3 (м, в системе родителя), b:Vector3}], segs:[[vec(base, мм), a, b]], spin, label, bob }
   let data = null, ready = false, swapped = false;
   let frameN = 0, clock = null, lastLabels = [];
-  let t = 0, dir = 0, speed = 1, T = 5.2, floatT = 0;
+  let t = 0, dir = 0, speed = 1, T = 6.2, floatT = 0;
+  const LEG_OUT = [2.5, 3.7], INNER = 4.4;     // ноги уходят; затем внутренние детали
   const fused = [], partMeshes = [];
 
   // ---------- подготовка ----------
@@ -84,8 +86,8 @@ export function createExplode(ctx) {
       let v = cfg[0].slice(); if (m.userData.exPart.endsWith('shoulder') || m.userData.exPart.startsWith('I_shoulder')) v = [Math.sign(c.x) * v[0], 0, 0];
       if (m.userData.exPart.includes('side_plate')) { v = [0, Math.sign(c.y) * Math.abs(v[1]), 0]; m.userData.name = `Боковина ${c.y > 0 ? 'левая' : 'правая'} по ходу собаки (файл ${m.userData.exPart}.stl)`; }   // боковина уходит в ту сторону, где стоит (имя L/R в KDY не совпадает со стороной в сборке)
       const u = addUnit([m], [[v, cfg[1], cfg[2]]], { label: cfg[3] && !(m.userData.exPart === 'I_shoulder_cls' && c.x < 0) ? cfg[3] : null, bob: true });
-      owners.body.push({ u, box: boxBase(m) });
-      if (m.userData.exPart === 'non-mega_T_cover_cls') { const lg = ctx.logo(); if (lg) addUnit([lg], [[[0, 0, v[2] + 14], cfg[1], cfg[2]]], { bob: true }); }
+      owners.body.push(owner(u, m));
+      if (m.userData.exPart === 'non-mega_T_cover_cls') { const lg = ctx.logo(); if (lg) addUnit([lg], [[[0, 0, v[2]], cfg[1], cfg[2]]], { bob: true, phOf: u }); }
     }
     // 3) электроника и прочее внутри корпуса
     const groups = new Map();
@@ -97,30 +99,29 @@ export function createExplode(ctx) {
     }
     let i = 0;
     for (const [k, objs] of groups) {
-      const a = 2.7 + (i++ % 7) * 0.12;
-      const u = addUnit(objs, [[ATT[k][0], a, a + 1.5]], { label: ATT[k][1], bob: true });
-      objs.forEach(o => owners.body.push({ u, box: boxBase(o) }));
+      const a = INNER + (i++ % 8) * 0.1;
+      addUnit(objs, [[ATT[k][0], a, a + 1.4]], { label: ATT[k][1], bob: true });
     }
     // 4) ноги: целиком в сторону, потом детали ноги веером
     for (const leg of ['front_left', 'front_right', 'rear_left', 'rear_right']) {
       const sx = leg.startsWith('front') ? 1 : -1, sy = leg.endsWith('left') ? 1 : -1;
       const root = robot.joints[`${leg}_shoulder`];
-      addUnit([root], [[[sx * 45, sy * 185, 0], 2.0, 3.4]], { bob: true });
+      addUnit([root], [[[sx * 45, sy * 185, 0], LEG_OUT[0], LEG_OUT[1]]], { bob: true });
       const sub = {
         shoulder_link: [0, 0, 0], leg_link: [0, sy * 60, 0], leg_link_cover: [0, sy * 125, 0], foot_link: [0, sy * 60, -70],
       };
       for (const [lk, v] of Object.entries(sub)) {
         const ms = partMeshes.filter(m => m.userData.link === `${leg}_${lk}`);
-        const u = addUnit(ms, [[v, 3.1, 4.6]], { label: leg === 'front_left' ? { leg_link: 'Бедро', leg_link_cover: 'Крышка бедра', foot_link: 'Голень', shoulder_link: 'Кронштейн плеча' }[lk] : null });
-        ms.forEach(m => owners[leg].push({ u, box: boxBase(m), sub: v }));
+        const u = addUnit(ms, [[v, INNER, INNER + 1.4]], { label: leg === 'front_left' ? { leg_link: 'Бедро', leg_link_cover: 'Крышка бедра', foot_link: 'Голень', shoulder_link: 'Кронштейн плеча' }[lk] : null });
+        ms.forEach(m => owners[leg].push(owner(u, m)));
       }
       const toe = robot.links[`${leg}_toe_link`].children.find(c => c.isURDFVisual);
-      if (toe) addUnit([toe], [[[0, sy * 60, -135], 3.2, 4.7]], { label: leg === 'front_left' ? 'Стопа' : null });
+      if (toe) addUnit([toe], [[[0, sy * 60, -135], INNER + .1, INNER + 1.5]], { label: leg === 'front_left' ? 'Стопа' : null });
       // серво: плечевое — вверх из кронштейна, бедренное — между бедром и крышкой, коленное — рядом с голенью
       for (const [lk, kind, v] of [['shoulder_link', 1, [0, 0, 70]], ['leg_link', 2, [0, sy * 92, 10]], ['foot_link', 3, [0, sy * 100, -70]]]) {
         const vis = robot.links[`${leg}_${lk}`].children.find(c => c.isURDFVisual);
         const sv = vis.children.filter(c => !c.isMesh && c.children.some(m => String(m.userData?.part).startsWith('servo_')));
-        if (sv.length) addUnit(sv, [[v, 3.3, 4.8]], { label: leg === 'front_left' && kind === 2 ? 'Серво PDI-HV5523MG' : null });
+        if (sv.length) addUnit(sv, [[v, INNER + .2, INNER + 1.6]], { label: leg === 'front_left' && kind === 2 ? 'Серво PDI-HV5523MG' : null });
       }
     }
     // 5) крепёж
@@ -139,9 +140,10 @@ export function createExplode(ctx) {
         const frame = new THREE.Matrix4().multiplyMatrices(vis.matrixWorld, new THREE.Matrix4().compose(src.position, src.quaternion, src.scale));   // система URDF-меша (мм)
         const parent = leg ? robot.joints[`${leg}_shoulder`] : base;
         const pInv = parent.matrixWorld.clone().invert();
-        for (const f of list) {
+        for (let f of list) {
           const D = +f.size.slice(1);
-          const head = new THREE.Vector3(...f.head), d = new THREE.Vector3(...f.dir).normalize();
+          let head = new THREE.Vector3(...f.head), d = new THREE.Vector3(...f.dir).normalize();
+          if (f.hexhead) { head = head.addScaledVector(d, f.span); d.negate(); f = { ...f, hexhead: false }; }   // M5 крышек: головка снаружи крышки, болт вворачивается внутрь
           const bolt = makeBolt(D, f.len, f.hexhead, fastMat), nut = f.nut ? makeNut(D, fastMat) : null;
           const place = (obj, p) => {
             const w = new THREE.Matrix4().multiplyMatrices(frame, new THREE.Matrix4().compose(p, new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d), new THREE.Vector3(1000, 1000, 1000)));
@@ -153,12 +155,17 @@ export function createExplode(ctx) {
           // направление «наружу» в системе base_link
           const wHead = head.clone().applyMatrix4(frame), wDir = d.clone().transformDirection(frame);
           const bHead = wHead.clone().applyMatrix4(baseInv).multiplyScalar(1000), bDir = wDir.clone().transformDirection(baseInv);
-          const own = nearest(owners[leg || 'body'], bHead);
-          const ownSegs = own ? own.u.segs.filter(s => !leg || s[1] >= 3) : [];
-          const a = 0.1 + Math.random() * 0.6;
-          const out = bDir.clone().multiplyScalar(-1);                       // головка выходит против оси болта
-          addUnit([bolt], [[out.clone().multiplyScalar(40).toArray(), a, a + 0.9], ...ownSegs], { spin: { o: bolt.children[0], turns: 5, a, b: a + 0.9 }, fast: true, label: nFast === 0 ? 'Крепёж: болты M3/M4/M5, гайки' : null });
-          if (nut) addUnit([nut], [[bDir.clone().multiplyScalar(28).toArray(), a, a + 0.9], ...ownSegs], { spin: { o: nut.children[0], turns: -3, a, b: a + 0.9 }, fast: true });
+          // какие детали стягивает болт: вершины стенок отверстия вдоль его оси (а не габаритные коробки — у крышки она охватывает весь корпус)
+          const J = joined(owners[leg || 'body'], bHead, bDir, f.len, D);
+          const moving = J.filter(j => j.o.u.segs.some(sg => sg[2] > sg[1] && (sg[0][0] || sg[0][1] || sg[0][2])));
+          const sep = moving.length ? Math.min(...moving.map(j => j.o.u.segs[0][1])) : INNER;            // когда эти детали разъединяются
+          let a = sep - 0.85 + Math.random() * 0.15, b = a + 0.65;                                      // выкрутить прямо перед этим
+          if (leg) { a = Math.max(a, LEG_OUT[1] + 0.02 + Math.random() * 0.1); b = Math.min(INNER - 0.03, a + 0.55); }   // болты ноги — когда нога уже отъехала
+          const headU = J.length ? J.reduce((p, q) => q.t0 < p.t0 ? q : p).o.u : null;                  // деталь со стороны головки
+          const nutU = J.length ? J.reduce((p, q) => q.t1 > p.t1 ? q : p).o.u : null;                   // деталь со стороны гайки
+          const out = bDir.clone().multiplyScalar(-(f.len + 12));                                       // болт выходит целиком, головкой наружу
+          const bu = addUnit([bolt], [[out.toArray(), a, b], ...(headU ? headU.segs : [])], { spin: { o: bolt.children[0], turns: f.len / 2.5, a, b }, fast: true, bob: headU?.bob, phOf: headU, label: nFast === 0 ? 'Крепёж: болты M3/M4/M5, гайки' : null });
+          if (nut) addUnit([nut], [[bDir.clone().multiplyScalar(14).toArray(), a, b], ...((nutU || headU) ? (nutU || headU).segs : [])], { spin: { o: nut.children[0], turns: -2, a, b }, fast: true, bob: (nutU || headU)?.bob, phOf: nutU || headU });
           nFast++;
         }
       }
@@ -173,10 +180,35 @@ export function createExplode(ctx) {
       it.b = it.o.matrixAutoUpdate ? it.o.position.clone() : new THREE.Vector3().setFromMatrixPosition(it.o.matrix);
     }
     units.forEach(u => u.ph = Math.random() * Math.PI * 2);
+    units.forEach(u => { if (u.phOf) u.ph = u.phOf.ph; });         // болты и логотип покачиваются вместе со своей деталью
     buildLabels();
     ready = true;
   }
 
+  // деталь-владелец: вершины меша в системе base_link (мм) для поиска стягиваемых деталей
+  function owner(u, m) {
+    m.updateMatrixWorld(true);
+    const M = new THREE.Matrix4().multiplyMatrices(base.matrixWorld.clone().invert(), m.matrixWorld), pos = m.geometry.attributes.position, v = new THREE.Vector3();
+    const P = new Float32Array(pos.count * 3);
+    for (let k = 0; k < pos.count; k++) { v.fromBufferAttribute(pos, k).applyMatrix4(M).multiplyScalar(1000); P[3 * k] = v.x; P[3 * k + 1] = v.y; P[3 * k + 2] = v.z; }
+    const box = new THREE.Box3().setFromArray(P);
+    return { u, P, box };
+  }
+  function joined(list, h, d, L, D) {
+    const res = [], R = D / 2 + 1.2, seg = new THREE.Box3().setFromPoints([h, h.clone().addScaledVector(d, L)]).expandByScalar(R + 1);
+    for (const o of list) {
+      if (!o.box.intersectsBox(seg)) continue;
+      let n = 0, t0 = 1e9, t1 = -1e9;
+      for (let k = 0; k < o.P.length; k += 3) {
+        const x = o.P[k] - h.x, y = o.P[k + 1] - h.y, z = o.P[k + 2] - h.z, t = x * d.x + y * d.y + z * d.z;
+        if (t < -1 || t > L + 1) continue;
+        const px = x - t * d.x, py = y - t * d.y, pz = z - t * d.z;
+        if (px * px + py * py + pz * pz < R * R) { n++; if (t < t0) t0 = t; if (t > t1) t1 = t; }
+      }
+      if (n >= 3) res.push({ o, t0, t1 });
+    }
+    return res;
+  }
   function nearest(list, p) {
     let best = null, bd = 1e9;
     for (const it of list) { const d = it.box.distanceToPoint(p); if (d < bd) { bd = d; best = it; } }
