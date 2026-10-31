@@ -4,8 +4,7 @@
 её телом стенки (между наружной и внутренней плоскостью стенки) и выдавливает «ALA-TOO» на 0.8 мм.
 
 Пишет:
-  3d-viewer/stl/kdy/backpart_alatoo.stl — нижняя крышка + задняя крышка без гравировки (координаты URDF-меша backpart), для 3D-модели
-  3d-viewer/parts/rear_text.stl         — надпись в системе base_link (мм), в 3D-модели красится отдельно
+  3d-viewer/stl/kdy/backpart_alatoo.stl — нижняя крышка + задняя крышка с надписью одним телом (координаты URDF-меша backpart), для 3D-модели
   print/R_cover_alatoo.stl              — задняя крышка с надписью одним телом, в ориентации исходного R_cover, для печати
 Деталь берётся из print/kdy/R_cover.stl, её место — из tools/kdy/fit.json (tools/kdy/fit_kdy.py).
 Нужно: pip install numpy trimesh manifold3d networkx shapely matplotlib
@@ -83,9 +82,9 @@ for g in glyphs:
 text = trimesh.util.concatenate(parts); text.apply_transform(M)
 print(f'надпись «{TEXT}»: {text.extents.round(1).tolist()} мм, y {text.bounds[0][1]:.1f}…{text.bounds[1][1]:.1f}, z {text.bounds[0][2]:.1f}…{text.bounds[1][2]:.1f}')
 
-out = filled.copy(); out.apply_transform(np.linalg.inv(T))
+cover = trimesh.boolean.union([filled, text], engine='manifold')        # надпись — часть крышки, как при печати
+out = cover.copy(); out.apply_transform(np.linalg.inv(T))
 trimesh.util.concatenate([bottom, out]).export(os.path.join(V, 'stl', 'kdy', 'backpart_alatoo.stl'))
-text.export(os.path.join(V, 'parts', 'rear_text.stl'))
-pr = trimesh.boolean.union([filled, text], engine='manifold'); pr.apply_transform(np.linalg.inv(TR))
+pr = cover.copy(); pr.apply_transform(np.linalg.inv(TR))
 pr.export(os.path.join(ROOT, 'print', 'R_cover_alatoo.stl'))
 print('watertight:', out.is_watertight, pr.is_watertight)

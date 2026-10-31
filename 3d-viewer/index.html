@@ -19,15 +19,19 @@ details{margin:12px 0 4px}#report{font-size:12px;line-height:1.6}#report a{color
 #tip{position:absolute;left:12px;bottom:10px;color:var(--mut);font-size:12px;pointer-events:none}
 #lbl{position:absolute;pointer-events:none;background:#000c;color:#fff;padding:3px 7px;border-radius:5px;font-size:12px;display:none;white-space:nowrap}
 #load{position:absolute;inset:0;display:grid;place-items:center;color:var(--mut)}
+body.present #app{grid-template-columns:1fr;grid-template-rows:minmax(0,1fr)}body.present #view{min-height:0;overflow:hidden}body.present canvas{position:absolute;inset:0}body.present #side,body.present #tip{display:none}
+#exBar{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);display:flex;gap:10px;align-items:center;background:#1d2026e6;border:1px solid #3a3f4a;border-radius:10px;padding:8px 12px;font-size:13px;flex-wrap:wrap;justify-content:center;max-width:calc(100% - 32px)}
+#exBar button{margin:0;font-weight:600}#exBar button:disabled{opacity:.4;cursor:default}#exBar label{display:flex;gap:6px;align-items:center;color:var(--mut)}#exBar input[type=range]{width:90px}
 @media(max-width:800px){#app{grid-template-columns:1fr;grid-template-rows:55% 45%}}
 </style></head><body>
 <div id="app">
  <div id="view"><div id="load">Загрузка модели…</div><div id="tip">ЛКМ — вращать · ПКМ — двигать · колесо — масштаб · наведи на деталь — название</div><div id="lbl"></div></div>
  <aside id="side">
-  <h1>SpotMicro — 3D модель <span style="color:var(--mut);font-size:12px;font-weight:400">v2.2</span></h1>
+  <h1>SpotMicro — 3D модель <span style="color:var(--mut);font-size:12px;font-weight:400">v2.4</span></h1>
   <div style="color:var(--mut);font-size:12px">Детали KDY0523 для печати (вариант _cls) и CAD PCA9685; Pi 3B по механическому чертежу; остальное — габаритные модели. Состав — по списку деталей от 23.10.2026.</div>
   <h2>Позы</h2>
-  <div><button id="bStand" class="on">Стойка</button><button id="bSit">Сесть</button><button id="bWalk">Управление</button><button id="bSpin">Вращение</button></div>
+  <div><button id="bStand" class="on">Стойка</button><button id="bSit">Сесть</button><button id="bWalk">Управление</button><button id="bSpin">Вращение</button><button id="bExplode">Разборка</button></div>
+  <div style="font-size:12px;color:var(--mut);margin-top:2px"><a href="?explode" style="color:var(--acc)">Взрыв-схема на весь экран</a></div>
   <h2>Слои</h2>
   <label class="row"><input type="checkbox" id="cShell" checked> Корпус и ноги</label>
   <label class="row" style="display:grid;grid-template-columns:auto minmax(0,1fr) 36px;gap:8px">Прозрачность <input type="range" id="sGhost" min="0" max="100" value="0" style="min-width:0;width:100%"><span id="vGhost" style="color:var(--mut);text-align:right">0%</span></label>
@@ -58,6 +62,6 @@ details{margin:12px 0 4px}#report{font-size:12px;line-height:1.6}#report a{color
  </aside>
 </div>
 <script>window.addEventListener("error",e=>{const t=document.getElementById("tip");t.style.color="#ff6b6b";t.textContent="ОШИБКА: "+e.message+" @"+(e.filename||"").split("/").pop()+":"+e.lineno});window.addEventListener("unhandledrejection",e=>{const t=document.getElementById("tip");t.style.color="#ff6b6b";t.textContent="ОШИБКА: "+(e.reason&&e.reason.message||e.reason)})</script>
-<script type="importmap">{"imports":{"three":"./lib/three.module.js","three/examples/jsm/loaders/STLLoader.js":"./lib/jsm/STLLoader.js","three/examples/jsm/loaders/SVGLoader.js":"./lib/jsm/SVGLoader.js","three/examples/jsm/controls/OrbitControls.js":"./lib/jsm/OrbitControls.js"}}</script>
+<script type="importmap">{"imports":{"three":"./lib/three.module.js","three/examples/jsm/loaders/STLLoader.js":"./lib/jsm/STLLoader.js","three/examples/jsm/loaders/SVGLoader.js":"./lib/jsm/SVGLoader.js","three/examples/jsm/controls/OrbitControls.js":"./lib/jsm/OrbitControls.js","three/examples/jsm/environments/RoomEnvironment.js":"./lib/jsm/RoomEnvironment.js"}}</script>
 <script type="module" src="./app.js"></script>
 </body></html>

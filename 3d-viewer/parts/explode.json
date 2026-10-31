@@ -1,0 +1,1277 @@
+{
+ "parts": {
+  "larm": [
+   {
+    "file": "stl/parts/larm__0__L_arm_cls_cable.stl",
+    "part": "L_arm_cls_cable"
+   }
+  ],
+  "rarm": [
+   {
+    "file": "stl/parts/rarm__0__R_arm_cls_cable.stl",
+    "part": "R_arm_cls_cable"
+   }
+  ],
+  "larm_cover": [
+   {
+    "file": "stl/parts/larm_cover__0__L_arm_cover.stl",
+    "part": "L_arm_cover"
+   }
+  ],
+  "rarm_cover": [
+   {
+    "file": "stl/parts/rarm_cover__0__R_arm_cover.stl",
+    "part": "R_arm_cover"
+   }
+  ],
+  "lfoot": [
+   {
+    "file": "stl/parts/lfoot__0__L_wrist_cls.stl",
+    "part": "L_wrist_cls"
+   }
+  ],
+  "rfoot": [
+   {
+    "file": "stl/parts/rfoot__0__R_wrist_cls.stl",
+    "part": "R_wrist_cls"
+   }
+  ],
+  "lshoulder": [
+   {
+    "file": "stl/parts/lshoulder__0__L_arm_joint_cls.stl",
+    "part": "L_arm_joint_cls"
+   }
+  ],
+  "rshoulder": [
+   {
+    "file": "stl/parts/rshoulder__0__R_arm_joint_cls.stl",
+    "part": "R_arm_joint_cls"
+   }
+  ],
+  "mainbody": [
+   {
+    "file": "stl/parts/mainbody__0__I_shoulder_cls.stl",
+    "part": "I_shoulder_cls"
+   },
+   {
+    "file": "stl/parts/mainbody__1__I_shoulder_cls.stl",
+    "part": "I_shoulder_cls"
+   },
+   {
+    "file": "stl/parts/mainbody__2__O_shoulder.stl",
+    "part": "O_shoulder"
+   },
+   {
+    "file": "stl/parts/mainbody__3__O_shoulder.stl",
+    "part": "O_shoulder"
+   },
+   {
+    "file": "stl/parts/mainbody__4__non-mega_L_side_plate.stl",
+    "part": "non-mega_L_side_plate"
+   },
+   {
+    "file": "stl/parts/mainbody__5__R_side_plate.stl",
+    "part": "R_side_plate"
+   },
+   {
+    "file": "stl/parts/mainbody__6__plate_plain.stl",
+    "part": "plate_plain"
+   }
+  ],
+  "frontpart": [
+   {
+    "file": "stl/parts/frontpart__0__non-mega_T_cover_cls.stl",
+    "part": "non-mega_T_cover_cls"
+   },
+   {
+    "file": "stl/parts/frontpart__1__F_cover.stl",
+    "part": "F_cover"
+   }
+  ],
+  "backpart": [
+   {
+    "file": "stl/parts/backpart__0__non-mega_B_cover_cls.stl",
+    "part": "non-mega_B_cover_cls"
+   },
+   {
+    "file": "stl/parts/backpart__1__R_cover.stl",
+    "part": "R_cover"
+   }
+  ]
+ },
+ "fasteners": {
+  "larm": [
+   {
+    "size": "M3",
+    "head": [
+     120.65,
+     -47.91,
+     -68.3
+    ],
+    "dir": [
+     1.0,
+     0.0002,
+     0.0
+    ],
+    "len": 10,
+    "nut": null,
+    "hexhead": false,
+    "span": 4.0
+   },
+   {
+    "size": "M3",
+    "head": [
+     131.65,
+     -47.91,
+     -68.3
+    ],
+    "dir": [
+     1.0,
+     0.0002,
+     0.0
+    ],
+    "len": 10,
+    "nut": null,
+    "hexhead": false,
+    "span": 7.5
+   },
+   {
+    "size": "M4",
+    "head": [
+     137.44,
+     -22.91,
+     -26.14
+    ],
+    "dir": [
+     0.0002,
+     -1.0,
+     -0.0001
+    ],
+    "len": 15,
+    "nut": [
+     137.45,
+     -38.41,
+     -26.14
+    ],
+    "hexhead": false,
+    "span": 13.0
+   },
+   {
+    "size": "M4",
+    "head": [
+     127.44,
+     -22.91,
+     -26.14
+    ],
+    "dir": [
+     0.0002,
+     -1.0,
+     -0.0001
+    ],
+    "len": 15,
+    "nut": [
+     127.45,
+     -38.41,
+     -26.14
+    ],
+    "hexhead": false,
+    "span": 13.0
+   },
+   {
+    "size": "M4",
+    "head": [
+     137.44,
+     -22.73,
+     22.36
+    ],
+    "dir": [
+     0.0002,
+     -1.0,
+     -0.0001
+    ],
+    "len": 15,
+    "nut": [
+     137.45,
+     -38.42,
+     22.36
+    ],
+    "hexhead": false,
+    "span": 13.2
+   },
+   {
+    "size": "M4",
+    "head": [
+     127.44,
+     -22.94,
+     22.36
+    ],
+    "dir": [
+     0.0002,
+     -1.0,
+     -0.0001
+    ],
+    "len": 15,
+    "nut": [
+     127.45,
+     -38.42,
+     22.36
+    ],
+    "hexhead": false,
+    "span": 13.0
+   },
+   {
+    "size": "M3",
+    "head": [
+     125.51,
+     -47.98,
+     -69.45
+    ],
+    "dir": [
+     0.9998,
+     0.0211,
+     -0.0032
+    ],
+    "len": 10,
+    "nut": null,
+    "hexhead": false,
+    "span": 6.5
+   }
+  ],
+  "rarm": [
+   {
+    "size": "M3",
+    "head": [
+     120.94,
+     158.43,
+     -67.34
+    ],
+    "dir": [
+     1.0,
+     -0.0039,
+     0.0039
+    ],
+    "len": 10,
+    "nut": null,
+    "hexhead": false,
+    "span": 4.0
+   },
+   {
+    "size": "M3",
+    "head": [
+     131.94,
+     158.38,
+     -67.3
+    ],
+    "dir": [
+     1.0,
+     -0.0039,
+     0.0039
+    ],
+    "len": 10,
+    "nut": null,
+    "hexhead": false,
+    "span": 7.5
+   },
+   {
+    "size": "M4",
+    "head": [
+     137.48,
+     132.88,
+     -25.28
+    ],
+    "dir": [
+     0.0038,
+     1.0,
+     0.0068
+    ],
+    "len": 15,
+    "nut": [
+     137.54,
+     148.58,
+     -25.18
+    ],
+    "hexhead": false,
+    "span": 13.0
+   },
+   {
+    "size": "M4",
+    "head": [
+     127.48,
+     132.92,
+     -25.32
+    ],
+    "dir": [
+     0.0038,
+     1.0,
+     0.0068
+    ],
+    "len": 15,
+    "nut": [
+     127.54,
+     148.62,
+     -25.22
+    ],
+    "hexhead": false,
+    "span": 13.0
+   },
+   {
+    "size": "M4",
+    "head": [
+     137.29,
+     132.88,
+     23.22
+    ],
+    "dir": [
+     0.0038,
+     1.0,
+     0.0068
+    ],
+    "len": 15,
+    "nut": [
+     137.35,
+     148.25,
+     23.32
+    ],
+    "hexhead": false,
+    "span": 12.7
+   },
+   {
+    "size": "M4",
+    "head": [
+     127.29,
+     133.11,
+     23.18
+    ],
+    "dir": [
+     0.0038,
+     1.0,
+     0.0068
+    ],
+    "len": 15,
+    "nut": [
+     127.35,
+     148.29,
+     23.28
+    ],
+    "hexhead": false,
+    "span": 12.5
+   },
+   {
+    "size": "M3",
+    "head": [
+     125.84,
+     158.11,
+     -68.52
+    ],
+    "dir": [
+     0.9997,
+     -0.0226,
+     0.0023
+    ],
+    "len": 10,
+    "nut": null,
+    "hexhead": false,
+    "span": 6.5
+   }
+  ],
+  "lfoot": [
+   {
+    "size": "M4",
+    "head": [
+     124.7,
+     -48.96,
+     -133.93
+    ],
+    "dir": [
+     -0.011,
+     0.9999,
+     -0.0058
+    ],
+    "len": 20,
+    "nut": [
+     124.5,
+     -30.96,
+     -134.03
+    ],
+    "hexhead": false,
+    "span": 20.0
+   },
+   {
+    "size": "M4",
+    "head": [
+     114.7,
+     -49.07,
+     -133.98
+    ],
+    "dir": [
+     -0.011,
+     0.9999,
+     -0.0058
+    ],
+    "len": 20,
+    "nut": [
+     114.5,
+     -31.07,
+     -134.08
+    ],
+    "hexhead": false,
+    "span": 20.0
+   },
+   {
+    "size": "M4",
+    "head": [
+     124.39,
+     -43.68,
+     -85.46
+    ],
+    "dir": [
+     -0.011,
+     0.9999,
+     -0.0058
+    ],
+    "len": 15,
+    "nut": [
+     124.24,
+     -30.68,
+     -85.53
+    ],
+    "hexhead": false,
+    "span": 15.0
+   },
+   {
+    "size": "M4",
+    "head": [
+     114.39,
+     -43.79,
+     -85.51
+    ],
+    "dir": [
+     -0.011,
+     0.9999,
+     -0.0058
+    ],
+    "len": 15,
+    "nut": [
+     114.25,
+     -30.79,
+     -85.59
+    ],
+    "hexhead": false,
+    "span": 15.0
+   }
+  ],
+  "rfoot": [
+   {
+    "size": "M4",
+    "head": [
+     124.95,
+     139.48,
+     -134.74
+    ],
+    "dir": [
+     0.0112,
+     0.9999,
+     0.0001
+    ],
+    "len": 20,
+    "nut": [
+     125.15,
+     157.47,
+     -134.74
+    ],
+    "hexhead": false,
+    "span": 20.0
+   },
+   {
+    "size": "M4",
+    "head": [
+     124.68,
+     139.48,
+     -86.25
+    ],
+    "dir": [
+     0.0112,
+     0.9999,
+     0.0001
+    ],
+    "len": 15,
+    "nut": [
+     124.83,
+     152.47,
+     -86.24
+    ],
+    "hexhead": false,
+    "span": 15.0
+   },
+   {
+    "size": "M4",
+    "head": [
+     114.95,
+     139.59,
+     -134.8
+    ],
+    "dir": [
+     0.0112,
+     0.9999,
+     0.0001
+    ],
+    "len": 20,
+    "nut": [
+     115.15,
+     157.59,
+     -134.8
+    ],
+    "hexhead": false,
+    "span": 20.0
+   },
+   {
+    "size": "M4",
+    "head": [
+     114.68,
+     139.59,
+     -86.3
+    ],
+    "dir": [
+     0.0112,
+     0.9999,
+     0.0001
+    ],
+    "len": 15,
+    "nut": [
+     114.83,
+     152.59,
+     -86.3
+    ],
+    "hexhead": false,
+    "span": 15.0
+   }
+  ],
+  "lshoulder": [
+   {
+    "size": "M4",
+    "head": [
+     138.89,
+     11.54,
+     -15.97
+    ],
+    "dir": [
+     -1.0,
+     -0.0002,
+     0.0001
+    ],
+    "len": 15,
+    "nut": [
+     125.89,
+     11.54,
+     -15.97
+    ],
+    "hexhead": false,
+    "span": 15.0
+   },
+   {
+    "size": "M4",
+    "head": [
+     138.89,
+     21.54,
+     -15.97
+    ],
+    "dir": [
+     -1.0,
+     -0.0002,
+     0.0001
+    ],
+    "len": 15,
+    "nut": [
+     125.89,
+     21.54,
+     -15.97
+    ],
+    "hexhead": false,
+    "span": 15.0
+   },
+   {
+    "size": "M4",
+    "head": [
+     138.9,
+     11.54,
+     32.53
+    ],
+    "dir": [
+     -1.0,
+     -0.0002,
+     0.0001
+    ],
+    "len": 15,
+    "nut": [
+     125.9,
+     11.54,
+     32.53
+    ],
+    "hexhead": false,
+    "span": 15.0
+   },
+   {
+    "size": "M4",
+    "head": [
+     138.9,
+     21.54,
+     32.53
+    ],
+    "dir": [
+     -1.0,
+     -0.0002,
+     0.0001
+    ],
+    "len": 15,
+    "nut": [
+     125.9,
+     21.54,
+     32.53
+    ],
+    "hexhead": false,
+    "span": 15.0
+   }
+  ],
+  "rshoulder": [
+   {
+    "size": "M4",
+    "head": [
+     138.63,
+     88.68,
+     -15.02
+    ],
+    "dir": [
+     -1.0,
+     0.0006,
+     0.0025
+    ],
+    "len": 15,
+    "nut": [
+     125.63,
+     88.68,
+     -14.99
+    ],
+    "hexhead": false,
+    "span": 15.0
+   },
+   {
+    "size": "M4",
+    "head": [
+     138.63,
+     98.68,
+     -15.0
+    ],
+    "dir": [
+     -1.0,
+     0.0006,
+     0.0025
+    ],
+    "len": 15,
+    "nut": [
+     125.63,
+     98.68,
+     -14.97
+    ],
+    "hexhead": false,
+    "span": 15.0
+   },
+   {
+    "size": "M4",
+    "head": [
+     138.75,
+     88.59,
+     33.48
+    ],
+    "dir": [
+     -1.0,
+     0.0006,
+     0.0025
+    ],
+    "len": 15,
+    "nut": [
+     125.75,
+     88.6,
+     33.51
+    ],
+    "hexhead": false,
+    "span": 15.0
+   },
+   {
+    "size": "M4",
+    "head": [
+     138.76,
+     98.59,
+     33.5
+    ],
+    "dir": [
+     -1.0,
+     0.0006,
+     0.0025
+    ],
+    "len": 15,
+    "nut": [
+     125.76,
+     98.6,
+     33.53
+    ],
+    "hexhead": false,
+    "span": 15.0
+   }
+  ],
+  "body": [
+   {
+    "size": "M3",
+    "head": [
+     108.92,
+     106.75,
+     2.25
+    ],
+    "dir": [
+     -1.0,
+     0.0,
+     -0.0001
+    ],
+    "len": 10,
+    "nut": null,
+    "hexhead": false,
+    "span": 2.0
+   },
+   {
+    "size": "M3",
+    "head": [
+     -21.86,
+     106.75,
+     1.8
+    ],
+    "dir": [
+     -1.0,
+     0.0,
+     -0.0001
+    ],
+    "len": 10,
+    "nut": null,
+    "hexhead": false,
+    "span": 2.0
+   },
+   {
+    "size": "M3",
+    "head": [
+     108.92,
+     3.46,
+     2.27
+    ],
+    "dir": [
+     -1.0,
+     0.0,
+     -0.0001
+    ],
+    "len": 20,
+    "nut": null,
+    "hexhead": false,
+    "span": 15.8
+   },
+   {
+    "size": "M3",
+    "head": [
+     -6.83,
+     3.46,
+     2.27
+    ],
+    "dir": [
+     -1.0,
+     0.0,
+     -0.0001
+    ],
+    "len": 20,
+    "nut": null,
+    "hexhead": false,
+    "span": 17.0
+   },
+   {
+    "size": "M3",
+    "head": [
+     108.93,
+     106.75,
+     21.25
+    ],
+    "dir": [
+     -1.0,
+     0.0,
+     -0.0001
+    ],
+    "len": 10,
+    "nut": null,
+    "hexhead": false,
+    "span": 2.0
+   },
+   {
+    "size": "M3",
+    "head": [
+     -21.86,
+     106.75,
+     20.8
+    ],
+    "dir": [
+     -1.0,
+     0.0,
+     -0.0001
+    ],
+    "len": 10,
+    "nut": null,
+    "hexhead": false,
+    "span": 2.0
+   },
+   {
+    "size": "M3",
+    "head": [
+     108.93,
+     3.46,
+     21.27
+    ],
+    "dir": [
+     -1.0,
+     0.0,
+     -0.0001
+    ],
+    "len": 20,
+    "nut": null,
+    "hexhead": false,
+    "span": 15.8
+   },
+   {
+    "size": "M3",
+    "head": [
+     -6.83,
+     3.46,
+     21.27
+    ],
+    "dir": [
+     -1.0,
+     0.0,
+     -0.0001
+    ],
+    "len": 20,
+    "nut": null,
+    "hexhead": false,
+    "span": 17.0
+   },
+   {
+    "size": "M3",
+    "head": [
+     159.43,
+     74.99,
+     37.24
+    ],
+    "dir": [
+     -1.0,
+     0.0,
+     -0.0001
+    ],
+    "len": 20,
+    "nut": null,
+    "hexhead": false,
+    "span": 21.0
+   },
+   {
+    "size": "M3",
+    "head": [
+     -74.85,
+     75.01,
+     36.81
+    ],
+    "dir": [
+     1.0,
+     -0.0,
+     0.0001
+    ],
+    "len": 20,
+    "nut": null,
+    "hexhead": false,
+    "span": 21.5
+   },
+   {
+    "size": "M3",
+    "head": [
+     159.43,
+     34.99,
+     37.23
+    ],
+    "dir": [
+     -1.0,
+     0.0,
+     -0.0001
+    ],
+    "len": 20,
+    "nut": null,
+    "hexhead": false,
+    "span": 21.0
+   },
+   {
+    "size": "M3",
+    "head": [
+     -74.85,
+     35.01,
+     36.82
+    ],
+    "dir": [
+     1.0,
+     -0.0,
+     0.0001
+    ],
+    "len": 20,
+    "nut": null,
+    "hexhead": false,
+    "span": 21.5
+   },
+   {
+    "size": "M3",
+    "head": [
+     159.42,
+     60.01,
+     -18.77
+    ],
+    "dir": [
+     -1.0,
+     0.0,
+     -0.0001
+    ],
+    "len": 20,
+    "nut": null,
+    "hexhead": false,
+    "span": 21.0
+   },
+   {
+    "size": "M3",
+    "head": [
+     -74.85,
+     59.99,
+     -19.19
+    ],
+    "dir": [
+     1.0,
+     -0.0,
+     0.0001
+    ],
+    "len": 20,
+    "nut": null,
+    "hexhead": false,
+    "span": 21.5
+   },
+   {
+    "size": "M3",
+    "head": [
+     159.42,
+     50.01,
+     -18.77
+    ],
+    "dir": [
+     -1.0,
+     0.0,
+     -0.0001
+    ],
+    "len": 20,
+    "nut": null,
+    "hexhead": false,
+    "span": 21.0
+   },
+   {
+    "size": "M3",
+    "head": [
+     -74.85,
+     49.99,
+     -19.19
+    ],
+    "dir": [
+     1.0,
+     -0.0,
+     0.0001
+    ],
+    "len": 20,
+    "nut": null,
+    "hexhead": false,
+    "span": 21.5
+   },
+   {
+    "size": "M5",
+    "head": [
+     -43.36,
+     35.01,
+     36.82
+    ],
+    "dir": [
+     -0.0001,
+     0.0002,
+     1.0
+    ],
+    "len": 15,
+    "nut": null,
+    "hexhead": true,
+    "span": 8.7
+   },
+   {
+    "size": "M5",
+    "head": [
+     -43.36,
+     75.01,
+     36.81
+    ],
+    "dir": [
+     -0.0001,
+     0.0002,
+     1.0
+    ],
+    "len": 15,
+    "nut": null,
+    "hexhead": true,
+    "span": 8.7
+   },
+   {
+    "size": "M5",
+    "head": [
+     -43.36,
+     49.99,
+     -19.19
+    ],
+    "dir": [
+     0.0001,
+     -0.0002,
+     -1.0
+    ],
+    "len": 15,
+    "nut": null,
+    "hexhead": true,
+    "span": 9.3
+   },
+   {
+    "size": "M5",
+    "head": [
+     -43.36,
+     59.99,
+     -19.19
+    ],
+    "dir": [
+     0.0001,
+     -0.0002,
+     -1.0
+    ],
+    "len": 15,
+    "nut": null,
+    "hexhead": true,
+    "span": 9.3
+   },
+   {
+    "size": "M5",
+    "head": [
+     128.43,
+     74.99,
+     37.24
+    ],
+    "dir": [
+     0.0001,
+     -0.0002,
+     1.0
+    ],
+    "len": 15,
+    "nut": null,
+    "hexhead": true,
+    "span": 8.3
+   },
+   {
+    "size": "M5",
+    "head": [
+     128.43,
+     34.99,
+     37.23
+    ],
+    "dir": [
+     0.0001,
+     -0.0002,
+     1.0
+    ],
+    "len": 15,
+    "nut": null,
+    "hexhead": true,
+    "span": 8.3
+   },
+   {
+    "size": "M5",
+    "head": [
+     128.42,
+     60.01,
+     -18.77
+    ],
+    "dir": [
+     -0.0001,
+     0.0002,
+     -1.0
+    ],
+    "len": 15,
+    "nut": null,
+    "hexhead": true,
+    "span": 9.8
+   },
+   {
+    "size": "M5",
+    "head": [
+     128.42,
+     50.01,
+     -18.77
+    ],
+    "dir": [
+     -0.0001,
+     0.0002,
+     -1.0
+    ],
+    "len": 15,
+    "nut": null,
+    "hexhead": true,
+    "span": 9.8
+   },
+   {
+    "size": "M3",
+    "head": [
+     159.87,
+     60.0,
+     -18.13
+    ],
+    "dir": [
+     -1.0,
+     -0.0,
+     -0.0
+    ],
+    "len": 10,
+    "nut": null,
+    "hexhead": false,
+    "span": 2.0
+   },
+   {
+    "size": "M3",
+    "head": [
+     159.87,
+     50.0,
+     -18.13
+    ],
+    "dir": [
+     -1.0,
+     -0.0,
+     -0.0
+    ],
+    "len": 10,
+    "nut": null,
+    "hexhead": false,
+    "span": 2.0
+   },
+   {
+    "size": "M3",
+    "head": [
+     159.86,
+     75.0,
+     37.87
+    ],
+    "dir": [
+     -1.0,
+     -0.0,
+     -0.0
+    ],
+    "len": 10,
+    "nut": null,
+    "hexhead": false,
+    "span": 2.0
+   },
+   {
+    "size": "M3",
+    "head": [
+     159.86,
+     35.0,
+     37.87
+    ],
+    "dir": [
+     -1.0,
+     -0.0,
+     -0.0
+    ],
+    "len": 10,
+    "nut": null,
+    "hexhead": false,
+    "span": 2.0
+   },
+   {
+    "size": "M3",
+    "head": [
+     107.27,
+     106.47,
+     2.79
+    ],
+    "dir": [
+     -1.0,
+     0.0,
+     0.0
+    ],
+    "len": 20,
+    "nut": null,
+    "hexhead": false,
+    "span": 15.0
+   },
+   {
+    "size": "M3",
+    "head": [
+     -7.73,
+     106.47,
+     2.79
+    ],
+    "dir": [
+     -1.0,
+     0.0,
+     0.0
+    ],
+    "len": 20,
+    "nut": null,
+    "hexhead": false,
+    "span": 15.0
+   },
+   {
+    "size": "M3",
+    "head": [
+     107.27,
+     106.47,
+     21.79
+    ],
+    "dir": [
+     -1.0,
+     0.0,
+     0.0
+    ],
+    "len": 20,
+    "nut": null,
+    "hexhead": false,
+    "span": 15.0
+   },
+   {
+    "size": "M3",
+    "head": [
+     -7.73,
+     106.47,
+     21.79
+    ],
+    "dir": [
+     -1.0,
+     0.0,
+     0.0
+    ],
+    "len": 20,
+    "nut": null,
+    "hexhead": false,
+    "span": 15.0
+   }
+  ]
+ },
+ "anchor": {
+  "body": "mainbody",
+  "larm": "larm",
+  "rarm": "rarm",
+  "lshoulder": "lshoulder",
+  "rshoulder": "rshoulder",
+  "lfoot": "lfoot",
+  "rfoot": "rfoot"
+ }
+}

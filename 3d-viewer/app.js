@@ -4,6 +4,8 @@ import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js';
 import URDFLoader from './lib/URDFLoader.js';
 import { bodyTriangles, obbOf, obbVsBody, obbObb, segVsBody, insideBody } from './check.js';
+import { createExplode } from './explode.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
 const view = document.getElementById('view');
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -15,9 +17,18 @@ const camera = new THREE.PerspectiveCamera(40, 1, 0.03, 20);
 camera.position.set(0.52, 0.34, 0.66);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0, 0.13, 0); controls.enableDamping = true;
-scene.add(new THREE.HemisphereLight(0xffffff, 0x333840, 1.1));
-const sun = new THREE.DirectionalLight(0xffffff, 1.6); sun.position.set(0.6, 1.2, 0.8); scene.add(sun);
-const back = new THREE.DirectionalLight(0x88aaff, 0.5); back.position.set(-0.8, 0.4, -0.6); scene.add(back);
+// свет: слабая заливка + тёплый ключевой сверху-спереди + холодный контровой; отражения — от окружения (RoomEnvironment)
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.9;
+scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(renderer), 0.04).texture;
+scene.add(new THREE.HemisphereLight(0xdde4ee, 0x1a1c20, 0.35));
+const sun = new THREE.DirectionalLight(0xfff1e0, 2.4); sun.position.set(0.5, 1.3, 0.7); scene.add(sun);
+const fill = new THREE.DirectionalLight(0xc8d4ff, 0.35); fill.position.set(-0.9, 0.3, 0.5); scene.add(fill);
+const back = new THREE.DirectionalLight(0x9fb8ff, 0.9); back.position.set(-0.6, 0.7, -0.9); scene.add(back);
+const ENV = 0.45;                                  // сила отражений окружения на материалах
+// мягкая контактная тень под собакой (радиальный градиент на плоскости)
+const shadowTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d'); const r = g.createRadialGradient(64, 64, 4, 64, 64, 64); r.addColorStop(0, 'rgba(0,0,0,.55)'); r.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = r; g.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(c); })();
+const contact = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.36), new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false }));
+contact.rotation.x = -Math.PI / 2; contact.position.y = 0.0005; contact.renderOrder = -1; scene.add(contact);
 const grid = new THREE.GridHelper(6, 120, 0x3a3f4a, 0x262a31); scene.add(grid);
 
 function resize() {
@@ -42,21 +53,25 @@ loader.load('spot_micro.urdf', r => {
 });
 manager.onLoad = async () => {
   if (!robot || shell.length) return;
-  robot.traverse(o => { if (o.isMesh) { o.material = new THREE.MeshStandardMaterial({ color: o.material?.color?.getHex?.() ?? 0x222428, roughness: .55, metalness: .1 }); shell.push(o); } });
+  robot.traverse(o => { if (o.isMesh) { o.material = new THREE.MeshStandardMaterial({ color: o.material?.color?.getHex?.() ?? 0x222428, roughness: .5, metalness: 0 }); shell.push(o); } });
   body = shell.filter(o => ['base_link', 'rear_link', 'front_link'].includes(linkOf(o)));   // корпус без ног и лидара
   buildJointsUI();
   await layoutReady;
   addElectronics();
   addLogo();
-  addRearText();
   applyPose(POSES.stand); groundY = rig.position.y;
   robot.links.lidar_link.traverse(m => { if (m.isMesh) m.visible = false; });
   fit();
   btn('bWalk').onclick();
+  setTimeout(tuneMaterials, 1500);
+  ex = createExplode({ robot, camera, controls, scene, view, stlLoader, pick, logo: () => logoGroup, hideWhileOpen, onState: exState });
   applyQuery();
   document.getElementById('load')?.remove();
 };
 manager.onError = u => console.error('не загрузилось', u);
+function tuneMaterials() {
+  scene.traverse(o => { if (o.isMesh && o.material?.isMeshStandardMaterial) { const m = o.material; m.envMapIntensity = m.metalness > .5 ? 1.0 : ENV; } });
+}
 function linkOf(o) { while (o && !o.isURDFLink) o = o.parent; return o?.urdfName; }
 
 // ===== детали =====
@@ -162,16 +177,6 @@ async function addLogo() {
   holder.position.set(0.010, 0, 0.036);              // плоский участок крышки: z = 36 мм
   robot.links.base_link.add(holder); logoGroup = holder;
   holder.traverse(o => { if (o.isMesh) { Object.assign(o.userData, { name: 'Логотип Ala-Too IT & Business College (Ø40 мм, рельеф до 2 мм)', cat: 'logo' }); pick.push(o); } });
-}
-
-// ---- задняя надпись «ALA-TOO»: гравировка K.D.Y залита в stl/kdy/backpart_alatoo.stl, надпись — parts/rear_text.stl (tools/mounts/make_rear.py) ----
-function addRearText() {
-  stlLoader.load('parts/rear_text.stl', g => {
-    g.scale(0.001, 0.001, 0.001);
-    const txt = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: 0x11225f, roughness: .45, metalness: .1 }));
-    robot.links.base_link.add(txt); shell.push(txt);
-    Object.assign(txt.userData, { name: 'Надпись ALA-TOO (рельеф 0.8 мм, печатается вместе с крышкой)', cat: 'logo' }); pick.push(txt);
-  });
 }
 
 // ===== компоновка по списку деталей от 23.10.2026 =====
@@ -512,7 +517,13 @@ function updateJunctions() {
 }
 let camRibbon = null;
 let wireTick = 0;
-function updateWires() { if ((wireTick++ % 3) === 0) { wires.forEach(w => { if (w.dyn) rebuildWire(w); }); updateJunctions(); } }
+let wireSig = '';
+function updateWires() {     // кабели серв пересобираются только когда меняются углы суставов
+  if ((wireTick++ % 3) !== 0) return;
+  const sig = Object.values(robot.joints).map(j => (+j.angle || 0).toFixed(3)).join(',');
+  if (sig === wireSig) return; wireSig = sig;
+  wires.forEach(w => { if (w.dyn) rebuildWire(w); }); updateJunctions();
+}
 
 // ===== легенда =====
 const CAT = {
@@ -792,6 +803,8 @@ renderer.domElement.addEventListener('pointermove', ev => {
 });
 function applyQuery() {
   const q = new URLSearchParams(location.search);
+  if (q.has('record')) { recordVideo(+q.get('record') || 1); return; }
+  if (q.has('explode')) { stopAnim(); setBtn('bStand'); applyPose(POSES.stand); groundY = rig.position.y; presentation(); if (q.get('explode') === 'open') setTimeout(explodeOpen, 300); if (q.get('at')) ex.seek(+q.get('at')).then(() => flyExploded(0.01)); }
   if (q.get('nologo') && logoGroup) logoGroup.visible = false;
   if (q.get('ghost')) { btn('sGhost').value = 75; btn('sGhost').oninput({ target: btn('sGhost') }); }
   if (q.get('noshell')) { btn('cShell').checked = false; btn('cShell').onchange({ target: btn('cShell') }); }
@@ -809,10 +822,118 @@ function applyQuery() {
 }
 function fit() { controls.target.set(0, 0.13, 0); }
 
+// ===== взрыв-схема (explode.js): кнопка «Разборка» и режим презентации ?explode =====
+let ex = null, exOpen = false, camTween = null;
+function hideWhileOpen(on) {
+  exOpen = on;
+  const elec = btn('cElec').checked;
+  pick.forEach(m => { if ((m.userData.wire || m.userData.cat === 'servowire' || m.userData.cat === 'ext') && m.userData.part !== 'plug') m.visible = !on && elec && optVisible(m); });
+  if (fovLines && on) fovLines.visible = false;
+  if (!on) { wireSig = ''; }
+}
+function flyCamera(dist, dur = 1.6, center = null, dirOver = null) {
+  const tgt = center ?? new THREE.Vector3(rig.position.x, rig.position.y + 0.06, rig.position.z);
+  const from = camera.position.clone(), fromT = controls.target.clone();
+  const dirv = dirOver ?? from.clone().sub(fromT).normalize(), to = tgt.clone().addScaledVector(dirv, dist);
+  let k = 0;
+  camTween = dt => { k = Math.min(1, k + dt / dur); const e = k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2; camera.position.lerpVectors(from, to, e); controls.target.lerpVectors(fromT, tgt, e); if (k >= 1) camTween = null; };
+}
+function exState(s) {
+  const b = document.getElementById('bExplode'), o = document.getElementById('exOpen'), c = document.getElementById('exClose');
+  if (b) { b.classList.toggle('on', s === 'opening' || s === 'exploded'); b.textContent = s === 'opening' || s === 'exploded' ? 'Собрать' : 'Разборка'; }
+  if (o) o.disabled = s !== 'assembled'; if (c) c.disabled = s !== 'exploded';
+  if (s === 'exploded') { controls.autoRotate = true; controls.autoRotateSpeed = 0.6; }
+  if (s === 'closing' || s === 'assembled') controls.autoRotate = spin;
+  if (s === 'assembled') { const f = assembledFrame(); flyCamera(f.d, 1.2, f.c); }
+}
+async function explodeOpen() {
+  if (!ex || ex.busy) return;
+  stopAnim(); keys.clear(); setBtn('bStand'); applyPose(POSES.stand); groundY = rig.position.y;
+  await ex.prepare(); flyExploded(2.2); ex.open();
+}
+function flyExploded(dur) {
+  const b = ex.explodedBounds(), c = b.getCenter(new THREE.Vector3()), r = b.getSize(new THREE.Vector3()).length() / 2;
+  const d = new THREE.Vector3(0.6, 0.45, 0.66).normalize();                         // 3/4 спереди-справа, сверху
+  flyCamera(r / Math.sin(camera.fov * Math.PI / 360) * 0.8, dur, c, d);
+}
+function explodeClose() { if (ex && !ex.busy) { controls.autoRotate = false; flyCamera(0.95, 1.6); ex.close(); } }
+btn('bExplode').onclick = () => (exOpen ? explodeClose() : explodeOpen());
+// ---- запись ролика: кадры по одному, без реального времени -> POST на локальный приёмник (tools/explode/record.py) ----
+async function recordVideo(speed) {
+  presentation(); document.getElementById('exBar')?.remove();
+  stopAnim(); applyPose(POSES.stand); tuneMaterials(); await ex.prepare();
+  renderer.setAnimationLoop(null); controls.enabled = false;
+  const W = 1920, H = 1080; renderer.setPixelRatio(1); renderer.setSize(W, H, false); camera.aspect = W / H; camera.updateProjectionMatrix();
+  view.style.width = W + 'px'; view.style.height = H + 'px';
+  const b = ex.explodedBounds(), cB = b.getCenter(new THREE.Vector3()), rB = b.getSize(new THREE.Vector3()).length() / 2;
+  const dB = rB / Math.sin(camera.fov * Math.PI / 360) * 0.8;
+  const { c: cA, d: dA } = assembledFrame();
+  const FPS = 30, T = ex.T / speed, holdA = 1.0, holdB = 2.6, total = holdA + T + holdB + T + 1.2;
+  const comp = document.createElement('canvas'); comp.width = W; comp.height = H; const g = comp.getContext('2d');
+  const ease = k => k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+  let fl = 0;
+  for (let i = 0; i < Math.round(total * FPS); i++) {
+    const s = i / FPS;
+    let tt;                                                     // время взрыв-схемы
+    if (s < holdA) tt = 0; else if (s < holdA + T) tt = (s - holdA) * speed; else if (s < holdA + T + holdB) tt = ex.T; else tt = Math.max(0, ex.T - (s - holdA - T - holdB) * speed);
+    const open = s >= holdA && s < holdA + T + holdB + T;
+    fl = (s >= holdA + T && s < holdA + T + holdB) ? Math.min(1, fl + 0.5 / FPS) : Math.max(0, fl - 2 / FPS);
+    let labels = [];
+    if (open || tt > 0) labels = ex.frameAt(tt, s, fl); else ex.setAssembled();
+    contact.visible = !open;
+    const k = ease(Math.min(1, tt / ex.T)), az = 0.55 + s * 0.045, el = 0.42;
+    const c = cA.clone().lerp(cB, k), d = dA + (dB - dA) * k;
+    camera.position.set(c.x + d * Math.cos(el) * Math.cos(az), c.y + d * Math.sin(el), c.z + d * Math.cos(el) * Math.sin(az));
+    camera.lookAt(c); camera.updateMatrixWorld();
+    if (labels.length) labels = ex.frameAt(tt, s, fl);          // подписи — после установки камеры
+    renderer.render(scene, camera);
+    g.drawImage(renderer.domElement, 0, 0);
+    const la = tt >= ex.T * 0.97 ? Math.min(1, (s - holdA - T) / 0.5) * Math.min(1, (holdA + T + holdB - s) / 0.3) : 0;
+    if (la > 0) {
+      g.globalAlpha = Math.max(0, la); g.strokeStyle = '#c9ccd2'; g.lineWidth = 1.2; g.fillStyle = '#e9ebef'; g.font = '500 17px "Noto Sans", "DejaVu Sans", sans-serif'; g.textBaseline = 'middle';
+      for (const L of labels) {
+        g.beginPath(); g.moveTo(L.x, L.y); g.lineTo(L.ex - L.side * 14, L.ly); g.lineTo(L.ex, L.ly); g.stroke();
+        g.beginPath(); g.arc(L.x, L.y, 2.2, 0, Math.PI * 2); g.fill();
+        g.textAlign = L.side > 0 ? 'left' : 'right'; g.fillText(L.text, L.ex + L.side * 6, L.ly);
+      }
+      g.globalAlpha = 1;
+    }
+    const blob = await new Promise(r => comp.toBlob(r, 'image/png'));
+    await fetch(`http://localhost:8771/frame?i=${i}`, { method: 'POST', body: blob });
+  }
+  await fetch('http://localhost:8771/done', { method: 'POST', body: '' });
+  document.title = 'RECORD_DONE';
+}
+function assembledFrame() {       // центр и расстояние под собранную собаку — по её габаритам
+  const b = new THREE.Box3(); rig.updateMatrixWorld(true);
+  robot.traverse(o => { if (o.isMesh && shell.includes(o)) b.expandByObject(o); });
+  const c = b.getCenter(new THREE.Vector3()), r = b.getSize(new THREE.Vector3()).length() / 2;
+  return { c, d: r / Math.sin(camera.fov * Math.PI / 360) * 0.85 };
+}
+function presentation() {
+  document.body.classList.add('present');
+  scene.background = new THREE.Color(0x2c2f34); grid.visible = false; contact.visible = false;
+  if (logoGroup) logoGroup.visible = true;
+  resize(); { const f = assembledFrame(); flyCamera(f.d, 0.01, f.c); }
+  const bar = document.createElement('div'); bar.id = 'exBar';
+  bar.innerHTML = '<button id="exOpen">▶ Разобрать</button><button id="exClose" disabled>◀ Собрать</button><label><input type="checkbox" id="exLbl" checked> Подписи</label><label>Скорость <input type="range" id="exSpd" min="0.3" max="2" step="0.1" value="1"></label><a href="./" style="color:#aab">обычный режим</a>';
+  view.appendChild(bar);
+  btn('exOpen').onclick = explodeOpen; btn('exClose').onclick = explodeClose;
+  btn('exLbl').onchange = e => { ex.labelsOn(e.target.checked); };
+  btn('exSpd').oninput = e => ex.setSpeed(+e.target.value);
+  ex.prepare();
+}
+
 let _w = 0, _h = 0;
+let _lt = performance.now(), statsN = 0, statsT = 0; const statsQ = new URLSearchParams(location.search).has('stats');
 renderer.setAnimationLoop(() => {
   if (view.clientWidth !== _w || view.clientHeight !== _h) { _w = view.clientWidth; _h = view.clientHeight; resize(); }
-  if (robot && mode === 'walk') { const now = performance.now(); gaitStep(Math.min(0.05, (now - last) / 1000)); last = now; }
-  if (robot && wires.length) updateWires();
+  const _now = performance.now(), dt = Math.min(0.05, (_now - _lt) / 1000); _lt = _now;
+  if (robot && mode === 'walk' && !exOpen) { const now = performance.now(); gaitStep(Math.min(0.05, (now - last) / 1000)); last = now; }
+  if (robot && wires.length && !exOpen) updateWires();
+  if (ex) ex.update(dt);
+  if (camTween) camTween(dt);
+  contact.position.x = rig.position.x; contact.position.z = rig.position.z; contact.rotation.z = rig.rotation.y; contact.visible = !exOpen;
+  if (statsQ && robot) { statsN++; if (statsN === 4) document.title = JSON.stringify({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, meshes: (() => { let n = 0; scene.traverse(o => { if (o.isMesh || o.isLine) n++; }); return n; })(), geos: renderer.info.memory.geometries, ms: +((performance.now() - statsT) / 3).toFixed(1) }); if (statsN === 1) statsT = performance.now(); }
   controls.update(); renderer.render(scene, camera);
 });
