@@ -1,6 +1,4 @@
-# Project_Robo_dog
 
-Робособака на базе [Spot Micro](https://github.com/mike4192/spotMicro): рама KDY0523, программа mike4192.
 Версия 2.7, история изменений — в [CHANGELOG.md](CHANGELOG.md).
 
 ## Что здесь
